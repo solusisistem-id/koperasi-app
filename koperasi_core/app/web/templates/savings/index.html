@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Simpanan & Buku Ledger - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>💰 Simpanan & Ledger Transaksi</h1>
+    <p class="text-muted">Setiap saldo direkonstruksi secara matematis dari histori buku ledger (tanpa manipulasi saldo statis).</p>
+  </div>
+  <div style="display: flex; gap: 10px;">
+    {% if 'BENDAHARA' in current_user.roles or 'ADMIN_KOPERASI' in current_user.roles or 'SUPER_ADMIN' in current_user.roles %}
+    <a href="/savings/opening-balance" class="btn btn-secondary btn-sm">📥 Rekam Saldo Awal (Opening Balance)</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Total Summary -->
+<div class="card" style="background-color: var(--primary-light); border-color: #bfdbfe;">
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <div style="font-size: 0.9rem; font-weight: 600; color: var(--primary);">TOTAL SALDO SIMPANAN (REKONSTRUKSI LEDGER)</div>
+      <div style="font-size: 2.2rem; font-weight: 800; color: #1e3a8a; margin-top: 4px;">{{ savings.formatted_total_balance }}</div>
+    </div>
+    <div style="text-align: right; font-size: 0.85rem; color: var(--gray-700);">
+      Status Rekonstruksi: <span class="badge badge-success">TERVERIFIKASI SEIMBANG</span>
+    </div>
+  </div>
+</div>
+
+<!-- Accounts List -->
+<div class="card">
+  <div class="card-title">Daftar Rekening Simpanan</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Jenis Simpanan</th>
+          <th>Nomor Rekening</th>
+          <th>Karakteristik</th>
+          <th>Saldo Riil Saat Ini</th>
+          <th>Status</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for acc in savings.accounts %}
+        <tr>
+          <td><strong>Simpanan {{ acc.account_type }}</strong></td>
+          <td><code>{{ acc.account_number }}</code></td>
+          <td style="font-size: 0.85rem; color: var(--gray-600);">
+            {% if acc.account_type == 'POKOK' %}Simpanan modal awal anggota saat masuk (tidak dapat ditarik selama anggota).
+            {% elif acc.account_type == 'WAJIB' %}Simpanan rutin bulanan anggota koperasi.
+            {% else %}Simpanan sukarela fleksibel (dapat disetor/ditarik sewaktu-waktu).
+            {% endif %}
+          </td>
+          <td style="font-weight: 700; font-size: 1.1rem; color: var(--success);">{{ acc.formatted_balance }}</td>
+          <td><span class="badge badge-success">{{ acc.status }}</span></td>
+          <td>
+            <a href="/savings/account/{{ acc.id }}" class="btn btn-secondary btn-sm">Buku Ledger Mutasi</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Quick Deposit Form for Sukarela / Wajib -->
+{% if 'BENDAHARA' in current_user.roles or 'ADMIN_KOPERASI' in current_user.roles or 'SUPER_ADMIN' in current_user.roles %}
+<div class="card" style="max-width: 600px;">
+  <div class="card-title">💵 Setoran Simpanan Kasir (Idempotent)</div>
+  <form method="POST" action="/savings/deposit">
+    <input type="hidden" name="idempotency_key" value="{{ new_idempotency_key }}">
+
+    <div class="form-group">
+      <label class="form-label" for="account_id">Pilih Rekening Tujuan</label>
+      <select id="account_id" name="account_id" class="form-control" required>
+        {% for acc in savings.accounts %}
+        <option value="{{ acc.id }}">Simpanan {{ acc.account_type }} ({{ acc.account_number }}) - Saldo: {{ acc.formatted_balance }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="amount">Nominal Setoran (Rp)</label>
+      <input type="number" id="amount" name="amount" class="form-control" placeholder="cth: 100000" min="10000" step="5000" required>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="description">Keterangan Setoran</label>
+      <input type="text" id="description" name="description" class="form-control" placeholder="cth: Setoran Wajib Bulan Oktober 2026">
+      <p class="form-helper">Dilengkapi proteksi Idempotency Key untuk mencegah dobel input jika tombol diklik berulang.</p>
+    </div>
+
+    <button type="submit" class="btn btn-primary">
+      Proses Setoran Simpanan
+    </button>
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}

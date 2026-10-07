@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Verifikasi Dokumen Koperasi - Koperasi Core{% endblock %}
+
+{% block guest_content %}
+<div class="card" style="width: 100%; max-width: 580px; box-shadow: var(--shadow-md);">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <div style="font-size: 3rem;">🏛️</div>
+    <h1 style="font-size: 1.5rem; color: var(--gray-900);">Verifikasi Dokumen Resmi Koperasi</h1>
+    <p class="text-muted" style="margin-top: 4px;">Pusat Validasi Keabsahan Dokumen Digital (Server Source of Truth)</p>
+  </div>
+
+  {% if result.valid %}
+  <div class="alert alert-success" style="text-align: center; padding: 18px;">
+    <div style="font-size: 1.8rem;">✅</div>
+    <strong style="font-size: 1.1rem; display: block; margin-top: 4px;">DOKUMEN RESMI TERVERIFIKASI ASLI</strong>
+    <span style="font-size: 0.85rem; color: var(--gray-700);">Catatan validasi ditemukan pada database server Koperasi Core.</span>
+  </div>
+
+  <div class="table-container" style="margin-top: 20px;">
+    <table>
+      <tbody>
+        <tr><th style="width: 200px;">Nomor Dokumen</th><td><strong>{{ result.document_number }}</strong></td></tr>
+        <tr><th>Judul Dokumen</th><td>{{ result.title }}</td></tr>
+        <tr><th>Tipe Dokumen</th><td><code>{{ result.document_type }}</code></td></tr>
+        <tr><th>Status Verifikasi</th><td><span class="badge badge-success">{{ result.status }}</span></td></tr>
+        <tr><th>Tanggal Terbit / Sah</th><td>{{ result.verified_at }}</td></tr>
+        <tr><th>Pejabat Pengesah</th><td>{{ result.verifier_name }}</td></tr>
+        <tr><th>Token Pemeriksaan</th><td><code style="font-size: 0.8rem;">{{ token }}</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-danger" style="text-align: center; padding: 18px;">
+    <div style="font-size: 1.8rem;">⚠️</div>
+    <strong style="font-size: 1.1rem; display: block; margin-top: 4px;">DOKUMEN TIDAK VALID / DICABUT</strong>
+    <p style="margin-top: 6px; font-size: 0.9rem;">{{ result.reason }}</p>
+    {% if result.status == 'REVOKED' %}
+    <span class="badge badge-danger" style="margin-top: 8px;">STATUS: REVOKED (DICABUT)</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div style="text-align: center; margin-top: 24px; font-size: 0.8rem; color: var(--gray-600);">
+    Sistem Koperasi Core V2 &copy; 2026. Seluruh verifikasi dicatat dalam audit trail keamanan.
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Data Anggota - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>👥 Data Anggota Koperasi</h1>
+    <p class="text-muted">Total terdaftar: <strong>{{ total }}</strong> anggota</p>
+  </div>
+  <div style="display: flex; gap: 10px;">
+    <a href="/import" class="btn btn-secondary btn-sm">📥 Bulk Import Anggota</a>
+    <a href="/members/new" class="btn btn-primary btn-sm">➕ Tambah Anggota Manual</a>
+  </div>
+</div>
+
+<!-- Search & Filter Bar -->
+<div class="card" style="padding: 16px; margin-bottom: 20px;">
+  <form method="GET" action="/members" style="display: flex; gap: 12px; align-items: center;">
+    <input type="text" name="q" value="{{ query or '' }}" class="form-control" placeholder="Cari nama, nomor anggota, NIK, atau email..." style="flex: 1;">
+    <select name="status" class="form-control" style="width: 180px;">
+      <option value="">Semua Status</option>
+      <option value="ACTIVE" {% if selected_status == 'ACTIVE' %}selected{% endif %}>ACTIVE</option>
+      <option value="PENDING" {% if selected_status == 'PENDING' %}selected{% endif %}>PENDING</option>
+      <option value="INACTIVE" {% if selected_status == 'INACTIVE' %}selected{% endif %}>INACTIVE</option>
+    </select>
+    <button type="submit" class="btn btn-primary">Filter</button>
+  </form>
+</div>
+
+<!-- Members Table -->
+<div class="card">
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>No. Anggota</th>
+          <th>Nama Lengkap</th>
+          <th>NIK</th>
+          <th>Email</th>
+          <th>Departemen & Jabatan</th>
+          <th>Tgl Gabung</th>
+          <th>Status Keanggotaan</th>
+          <th>Akun Login</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in members %}
+        <tr>
+          <td><strong>{{ m.member_number }}</strong></td>
+          <td>{{ m.name }}</td>
+          <td><code>{{ m.nik }}</code></td>
+          <td>{{ m.email }}</td>
+          <td>{{ m.department_name or '-' }} / {{ m.position_title or '-' }}</td>
+          <td>{{ m.membership_date }}</td>
+          <td>
+            <span class="badge badge-{{ 'active' if m.membership_status == 'ACTIVE' else 'pending' }}">
+              {{ m.membership_status }}
+            </span>
+          </td>
+          <td>
+            {% if m.user_id_val %}
+              <span class="badge badge-success">AKTIF</span>
+            {% else %}
+              <span class="badge badge-secondary">BELUM ADA AKUN</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display: flex; gap: 6px;">
+              <a href="/members/{{ m.id }}" class="btn btn-secondary btn-sm">Detail</a>
+              {% if not m.user_id_val %}
+              <form method="POST" action="/members/{{ m.id }}/invite" style="display: inline;">
+                <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Kirim undangan aktivasi akun login ke {{ m.email }}?')">
+                  Undang Akun
+                </button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" style="text-align: center; padding: 24px;" class="text-muted">
+            Tidak ada data anggota yang sesuai kriteria.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

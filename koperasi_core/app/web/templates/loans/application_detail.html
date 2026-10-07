@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Detail Pengajuan {{ app.application_number }} - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>Pengajuan Pinjaman: {{ app.application_number }}</h1>
+    <p class="text-muted">Pemohon: <strong>{{ member.name }}</strong> ({{ member.member_number }})</p>
+  </div>
+  <div>
+    <a href="/loans" class="btn btn-secondary btn-sm">← Kembali ke Daftar</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-3">
+  <!-- Application Summary -->
+  <div class="card" style="grid-column: span 2;">
+    <div class="card-title">Rincian Pengajuan Pinjaman</div>
+    <div class="table-container">
+      <table>
+        <tbody>
+          <tr><th style="width: 220px;">Nomor Pengajuan</th><td><code>{{ app.application_number }}</code></td></tr>
+          <tr><th>Nama Anggota Pemohon</th><td><strong>{{ member.name }}</strong></td></tr>
+          <tr><th>Nomor Anggota</th><td>{{ member.member_number }}</td></tr>
+          <tr><th>Departemen / Jabatan</th><td>{{ member.department_name or '-' }} / {{ member.position_title or '-' }}</td></tr>
+          <tr><th>Atasan Langsung (Manager)</th><td><strong>{{ manager_name or 'Tidak ada / Langsung Ketua' }}</strong></td></tr>
+          <tr><th>Nominal Pinjaman Diajukan</th><td style="font-weight: 700; font-size: 1.1rem; color: var(--primary);">Rp {{ app.amount }}</td></tr>
+          <tr><th>Tenor Pinjaman</th><td>{{ app.tenor_months }} Bulan</td></tr>
+          <tr><th>Estimasi Angsuran Bulanan</th><td style="font-weight: 600;">Rp {{ app.monthly_installment }}</td></tr>
+          <tr><th>Tujuan / Keperluan</th><td>{{ app.purpose }}</td></tr>
+          <tr><th>Status Saat Ini</th><td><span class="badge badge-{{ app.status | lower }}">{{ app.status }}</span></td></tr>
+          <tr><th>Tahap Workflow Berjalan</th><td><span class="badge badge-secondary">{{ app.current_step }}</span></td></tr>
+          <tr><th>Waktu Pengajuan</th><td>{{ app.submitted_at }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Maker-Checker Violation Warning if applicant is viewing review form -->
+    {% if is_own_application and app.status not in ('DISBURSED', 'REJECTED') %}
+    <div class="alert alert-warning" style="margin-top: 20px;">
+      🔒 <strong>Aturan Maker-Checker Koperasi Core:</strong> Anda adalah pemohon pinjaman ini.
+      Sistem memblokir Anda untuk menyetujui (approve) pengajuan Anda sendiri. Persetujuan harus dilakukan oleh pejabat yang berwenang.
+    </div>
+    {% endif %}
+
+    <!-- Approval Action Box (for Manager, Ketua, or Admin) -->
+    {% if can_approve and not is_own_application and app.status in ('SUBMITTED', 'APPROVED_BY_MANAGER', 'REVISION_REQUESTED') %}
+    <div class="card" style="margin-top: 24px; border: 2px solid var(--primary); background-color: var(--primary-light);">
+      <div class="card-title" style="color: var(--primary);">
+        ✍️ Panel Keputusan Persetujuan: Tahap {{ app.current_step }}
+      </div>
+      <form method="POST" action="/loans/application/{{ app.id }}/approve">
+        <div class="form-group">
+          <label class="form-label" for="comment">Catatan / Komentar Keputusan</label>
+          <textarea id="comment" name="comment" class="form-control" rows="2" placeholder="cth: Pengajuan disetujui sesuai kapasitas potongan gaji"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <button type="submit" name="decision" value="APPROVE" class="btn btn-success" onclick="return confirm('Konfirmasi SETUJUI pengajuan ini?')">
+            ✅ Setujui (Approve)
+          </button>
+          <button type="submit" name="decision" value="REQUEST_REVISION" class="btn btn-secondary" onclick="return confirm('Minta revisi dokumen/nominal ke pemohon?')">
+            📝 Minta Revisi
+          </button>
+          <button type="submit" name="decision" value="REJECT" class="btn btn-danger" onclick="return confirm('Konfirmasi TOLAK pengajuan pinjaman ini?')">
+            ❌ Tolak (Reject)
+          </button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- Ready for Disbursement -->
+    {% if app.status == 'WAITING_DISBURSEMENT' %}
+    <div class="card" style="margin-top: 24px; border: 2px solid var(--success); background-color: var(--success-light);">
+      <div class="card-title" style="color: var(--success);">
+        💳 Pengajuan Siap Dicairkan (Waiting Disbursement)
+      </div>
+      <p style="font-size: 0.9rem; color: var(--gray-700); margin-bottom: 16px;">
+        Pengajuan telah disetujui secara lengkap oleh Atasan dan Ketua Koperasi. Bendahara dapat melakukan pencairan dana ke rekening anggota.
+      </p>
+      {% if 'BENDAHARA' in current_user.roles or 'SUPER_ADMIN' in current_user.roles %}
+      <a href="/disbursement" class="btn btn-success">
+        Buka Panel Pencairan Bendahara →
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Timeline / Audit Approval History -->
+  <div class="card">
+    <div class="card-title">Alur Persetujuan & Log Audit</div>
+    <div style="font-size: 0.85rem; line-height: 1.6;">
+      <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--gray-200);">
+        <div style="font-weight: 600; color: var(--gray-700);">1. Pengajuan Pemohon</div>
+        <div>Status: <span class="badge badge-success">SUBMITTED</span></div>
+        <div class="text-muted">{{ app.submitted_at }}</div>
+      </div>
+
+      <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--gray-200);">
+        <div style="font-weight: 600; color: var(--gray-700);">2. Persetujuan Atasan / Manager</div>
+        <div>
+          {% if app.status in ('APPROVED_BY_MANAGER', 'WAITING_DISBURSEMENT', 'DISBURSED') %}
+            <span class="badge badge-success">DISETUJUI ATASAN</span>
+          {% elif app.status == 'REJECTED' and app.current_step == 'COMPLETED' %}
+            <span class="badge badge-danger">DITOLAK ATASAN</span>
+          {% else %}
+            <span class="badge badge-pending">MENUNGGU REVIEW ATASAN</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--gray-200);">
+        <div style="font-weight: 600; color: var(--gray-700);">3. Persetujuan Ketua Koperasi</div>
+        <div>
+          {% if app.status in ('WAITING_DISBURSEMENT', 'DISBURSED') %}
+            <span class="badge badge-success">DISETUJUI KETUA</span>
+          {% elif app.status == 'APPROVED_BY_MANAGER' %}
+            <span class="badge badge-pending">DALAM ANTREAN KETUA</span>
+          {% else %}
+            <span class="badge badge-secondary">BELUM TAHAP KETUA</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div>
+        <div style="font-weight: 600; color: var(--gray-700);">4. Pencairan Dana (Disbursement)</div>
+        <div>
+          {% if app.status == 'DISBURSED' %}
+            <span class="badge badge-success">DANA DICAIRKAN</span>
+          {% elif app.status == 'WAITING_DISBURSEMENT' %}
+            <span class="badge badge-warning">MENUNGGU PENCAIRAN</span>
+          {% else %}
+            <span class="badge badge-secondary">BELUM TAHAP PENCAIRAN</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Approvals History Table -->
+    {% if approvals_history %}
+    <div style="margin-top: 24px; border-top: 1px solid var(--gray-200); padding-top: 16px;">
+      <div style="font-weight: 600; margin-bottom: 8px;">Catatan Keputusan:</div>
+      <ul style="list-style: none; font-size: 0.8rem;">
+        {% for ah in approvals_history %}
+        <li style="margin-bottom: 10px; padding: 8px; background-color: var(--gray-50); border-radius: 6px;">
+          <div><strong>{{ ah.role }} ({{ ah.approver_name }})</strong>: <span class="badge badge-{{ 'success' if ah.decision == 'APPROVE' else 'danger' }}">{{ ah.decision }}</span></div>
+          <div style="color: var(--gray-700); margin-top: 2px;">{{ ah.comment or '(tanpa catatan)' }}</div>
+          <div class="text-muted" style="font-size: 0.75rem;">{{ ah.created_at }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

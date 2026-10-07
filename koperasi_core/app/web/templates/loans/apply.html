@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Pengajuan Pinjaman Baru - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>➕ Formulir Pengajuan Pinjaman</h1>
+    <p class="text-muted">Pengajuan otomatis diteruskan ke atasan langsung (manager) sesuai struktur organisasi pegawai.</p>
+  </div>
+  <div>
+    <a href="/loans" class="btn btn-secondary btn-sm">← Kembali ke Pinjaman</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-3">
+  <div class="card" style="grid-column: span 2;">
+    <div class="card-title">Data Pengajuan Pinjaman</div>
+
+    <form method="POST" action="/loans/apply">
+      {% if 'ADMIN_KOPERASI' in current_user.roles or 'SUPER_ADMIN' in current_user.roles %}
+      <div class="form-group">
+        <label class="form-label" for="member_id">Pilih Anggota Pemohon *</label>
+        <select id="member_id" name="member_id" class="form-control" required>
+          {% for m in members %}
+          <option value="{{ m.id }}" {% if current_user.member_id == m.id %}selected{% endif %}>
+            {{ m.member_number }} - {{ m.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% else %}
+      <input type="hidden" name="member_id" value="{{ current_user.member_id }}">
+      {% endif %}
+
+      <div class="grid grid-cols-2">
+        <div class="form-group">
+          <label class="form-label" for="amount">Nominal Pinjaman (Rp) *</label>
+          <input type="number" id="amount" name="amount" class="form-control" placeholder="cth: 5000000" min="500000" step="100000" required oninput="calculateSimulation()">
+          <p class="form-helper">Minimal pinjaman Rp 500.000</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="tenor_months">Tenor Pengembalian (Bulan) *</label>
+          <select id="tenor_months" name="tenor_months" class="form-control" required onchange="calculateSimulation()">
+            <option value="3">3 Bulan</option>
+            <option value="6">6 Bulan</option>
+            <option value="12" selected>12 Bulan (1 Tahun)</option>
+            <option value="18">18 Bulan</option>
+            <option value="24">24 Bulan (2 Tahun)</option>
+            <option value="36">36 Bulan (3 Tahun)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="purpose">Keperluan / Alasan Pinjaman *</label>
+        <textarea id="purpose" name="purpose" class="form-control" rows="3" placeholder="cth: Renovasi rumah dan biaya pendidikan" required></textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="margin-top: 10px;">
+        🚀 Kirim Pengajuan Pinjaman
+      </button>
+    </form>
+  </div>
+
+  <!-- Simulation Card -->
+  <div class="card" style="background-color: var(--gray-50); border: 1px solid var(--gray-300);">
+    <div class="card-title">📊 Simulasi Estimasi Angsuran</div>
+    <div style="font-size: 0.9rem; line-height: 1.8;">
+      <div style="display: flex; justify-content: space-between;">
+        <span class="text-muted">Suku Bunga Koperasi:</span>
+        <strong>1.0% / bulan (Flat)</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span class="text-muted">Pokok Pinjaman:</span>
+        <strong id="sim_principal">Rp 5.000.000</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span class="text-muted">Total Jasa / Bunga:</span>
+        <strong id="sim_interest">Rp 600.000</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--gray-300); padding-top: 6px; margin-top: 6px;">
+        <span class="text-muted">Total Kewajiban:</span>
+        <strong id="sim_total" style="color: var(--primary);">Rp 5.600.000</strong>
+      </div>
+      <div style="background-color: white; border: 1px solid var(--gray-300); border-radius: var(--radius-md); padding: 12px; margin-top: 14px; text-align: center;">
+        <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-600); font-weight: 600;">Estimasi Angsuran Bulanan</div>
+        <div id="sim_monthly" style="font-size: 1.5rem; font-weight: 800; color: var(--success); margin-top: 4px;">Rp 466.667</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function formatRupiah(num) {
+  return "Rp " + Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+function calculateSimulation() {
+  const amount = parseFloat(document.getElementById('amount').value) || 0;
+  const tenor = parseInt(document.getElementById('tenor_months').value) || 12;
+  const rate = 0.01; // 1% per month flat
+
+  const interest = amount * rate * tenor;
+  const total = amount + interest;
+  const monthly = tenor > 0 ? (total / tenor) : 0;
+
+  document.getElementById('sim_principal').innerText = formatRupiah(amount);
+  document.getElementById('sim_interest').innerText = formatRupiah(interest);
+  document.getElementById('sim_total').innerText = formatRupiah(total);
+  document.getElementById('sim_monthly').innerText = formatRupiah(monthly);
+}
+document.addEventListener('DOMContentLoaded', calculateSimulation);
+</script>
+{% endblock %}

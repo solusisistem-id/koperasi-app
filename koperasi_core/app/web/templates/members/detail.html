@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Profil Anggota {{ member.member_number }} - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>Profil Anggota: {{ member.name }}</h1>
+    <p class="text-muted">Nomor Anggota: <strong>{{ member.member_number }}</strong></p>
+  </div>
+  <div>
+    <a href="/members" class="btn btn-secondary btn-sm">← Kembali ke Daftar</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-3">
+  <!-- Info Profil -->
+  <div class="card" style="grid-column: span 2;">
+    <div class="card-title">Informasi Pribadi & Kepegawaian</div>
+    <div class="table-container">
+      <table>
+        <tbody>
+          <tr><th style="width: 200px;">Nomor Anggota</th><td><strong>{{ member.member_number }}</strong></td></tr>
+          <tr><th>Nama Lengkap</th><td>{{ member.name }}</td></tr>
+          <tr><th>NIK</th><td><code>{{ member.nik }}</code></td></tr>
+          <tr><th>Email</th><td>{{ member.email }}</td></tr>
+          <tr><th>No. Telepon / HP</th><td>{{ member.phone or '-' }}</td></tr>
+          <tr><th>Alamat Domisili</th><td>{{ member.address or '-' }}</td></tr>
+          <tr><th>Rekening Bank</th><td>{{ member.bank_account or '-' }}</td></tr>
+          <tr><th>Tanggal Bergabung</th><td>{{ member.membership_date }}</td></tr>
+          <tr><th>Status Keanggotaan</th><td><span class="badge badge-active">{{ member.membership_status }}</span></td></tr>
+          <tr><th>ID Pegawai</th><td>{{ member.emp_code or '-' }}</td></tr>
+          <tr><th>Departemen / Jabatan</th><td>{{ member.department_name or '-' }} / {{ member.position_title or '-' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Status Akun Login & Undangan -->
+  <div class="card">
+    <div class="card-title">Status Akun Login</div>
+    <div style="padding: 10px 0;">
+      {% if member.user_id %}
+      <div class="alert alert-success">
+        ✅ <strong>Akun Pengguna Terhubung</strong><br>
+        Status Akun: <strong>{{ member.user_account_status or 'ACTIVE' }}</strong><br>
+        Terakhir Login: {{ member.last_login_at or '-' }}
+      </div>
+      {% else %}
+      <div class="alert alert-warning">
+        ⚠️ <strong>Belum Memiliki Akun Login</strong><br>
+        Anggota ini diimpor atau didaftarkan tanpa password.
+      </div>
+      <form method="POST" action="/members/{{ member.id }}/invite">
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+          📧 Kirim Tautan Undangan Aktivasi
+        </button>
+      </form>
+      {% endif %}
+
+      {% if invitation %}
+      <div class="alert alert-info" style="margin-top: 16px;">
+        <strong>Tautan Aktivasi Dihasilkan:</strong><br>
+        <code style="word-break: break-all; font-size: 0.8rem;">/invite?token={{ invitation.invitation_token }}</code>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Savings Overview for this member -->
+<div class="card" style="margin-top: 20px;">
+  <div class="card-title">
+    <span>Rekening Simpanan Anggota</span>
+    <a href="/savings/opening-balance?member_id={{ member.id }}" class="btn btn-secondary btn-sm">➕ Set Saldo Awal / Mutasi</a>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Jenis Simpanan</th>
+          <th>No. Rekening</th>
+          <th>Saldo Riil Rekonstruksi</th>
+          <th>Status</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for acc in savings.accounts %}
+        <tr>
+          <td><strong>Simpanan {{ acc.account_type }}</strong></td>
+          <td><code>{{ acc.account_number }}</code></td>
+          <td style="font-weight: 700; color: var(--success);">{{ acc.formatted_balance }}</td>
+          <td><span class="badge badge-success">{{ acc.status }}</span></td>
+          <td>
+            <a href="/savings/account/{{ acc.id }}" class="btn btn-secondary btn-sm">Lihat Mutasi</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Buku Ledger Mutasi Rekening - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>📖 Buku Ledger Mutasi: {{ account.account_type }}</h1>
+    <p class="text-muted">Nomor Rekening: <strong>{{ account.account_number }}</strong></p>
+  </div>
+  <div>
+    <a href="/savings" class="btn btn-secondary btn-sm">← Kembali ke Simpanan</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Riwayat Transaksi Pembukuan (Ledger Entries)</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Tanggal Transaksi</th>
+          <th>Tipe Mutasi</th>
+          <th>Kategori Referensi</th>
+          <th>Nominal</th>
+          <th>Saldo Pasca-Transaksi</th>
+          <th>Keterangan</th>
+          <th>Dicatat Oleh</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in transactions %}
+        <tr>
+          <td>#{{ tx.id }}</td>
+          <td>{{ tx.transaction_date }}</td>
+          <td>
+            <span class="badge badge-{{ 'success' if tx.transaction_type == 'CREDIT' else 'danger' }}">
+              {{ tx.transaction_type }}
+            </span>
+          </td>
+          <td><code>{{ tx.reference_type }}</code></td>
+          <td style="font-weight: 700; color: {% if tx.transaction_type == 'CREDIT' %}var(--success){% else %}var(--danger){% endif %};">
+            {% if tx.transaction_type == 'CREDIT' %}+{% else %}-{% endif %} {{ tx.formatted_amount }}
+          </td>
+          <td style="font-weight: 600;">{{ tx.formatted_balance_after }}</td>
+          <td>{{ tx.description or '-' }}</td>
+          <td>{{ tx.creator_name or 'System' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" style="text-align: center; padding: 24px;" class="text-muted">
+            Belum ada transaksi pada rekening simpanan ini.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
