@@ -1,0 +1,3 @@
+member_number,employee_id,name,nik,email,phone,department,position,membership_date,membership_status,address,bank_account
+MEM-101,EMP-101,Bambang Sudirman,3171011503850001,bambang.sudirman@koperasi.local,081234567801,IT,Software Engineer,2024-01-01,ACTIVE,"Jl. Melati No. 5, Jakarta Barat",BCA 8820192831
+MEM-102,EMP-102,Citra Lestari,3171012008920002,citra.lestari@koperasi.local,081234567802,HR,HR Specialist,2024-02-01,ACTIVE,"Jl. Kenanga No. 12, Jakarta Selatan",Mandiri 137001928374

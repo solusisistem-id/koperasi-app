@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Aktivasi Akun Anggota - Koperasi Core{% endblock %}
+
+{% block guest_content %}
+<div class="card" style="width: 100%; max-width: 460px; box-shadow: var(--shadow-md);">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <h1 style="font-size: 1.5rem; color: var(--primary);">🎉 Selamat Datang di Koperasi</h1>
+    <p class="text-muted" style="margin-top: 4px;">Anda diundang untuk mengaktifkan akun koperasi mandiri Anda.</p>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/invite">
+    <input type="hidden" name="token" value="{{ token }}">
+
+    <div class="form-group">
+      <label class="form-label" for="password">Tentukan Password Akun Anda</label>
+      <input type="password" id="password" name="password" class="form-control" placeholder="Minimal 8 karakter" required minlength="8" autofocus>
+      <p class="form-helper">Password tidak dapat dilihat atau diketahui oleh Admin demi privasi akun Anda.</p>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="confirm_password">Konfirmasi Password</label>
+      <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="Ketik ulang password" required minlength="8">
+    </div>
+
+    <button type="submit" class="btn btn-success" style="width: 100%; padding: 11px;">
+      Aktivasi Akun & Lanjut Login
+    </button>
+  </form>
+</div>
+{% endblock %}

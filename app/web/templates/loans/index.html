@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Pinjaman - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>📑 Pinjaman Anggota & Pengajuan</h1>
+    <p class="text-muted">Kelola pengajuan pinjaman, alur persetujuan bertingkat, dan angsuran berjalan.</p>
+  </div>
+  <div>
+    <a href="/loans/apply" class="btn btn-primary">➕ Ajukan Pinjaman Baru</a>
+  </div>
+</div>
+
+<!-- Active Loans -->
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-title">Pinjaman Aktif Berjalan</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>No. Pinjaman</th>
+          <th>Nama Anggota</th>
+          <th>Pokok Pinjaman</th>
+          <th>Total Kewajiban</th>
+          <th>Sisa Tagihan (Outstanding)</th>
+          <th>Tenor</th>
+          <th>Angsuran / Bln</th>
+          <th>Status</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in active_loans %}
+        <tr>
+          <td><strong>{{ l.loan_number }}</strong></td>
+          <td>{{ l.member_name }}</td>
+          <td>Rp {{ l.principal_amount }}</td>
+          <td>Rp {{ l.total_amount }}</td>
+          <td style="font-weight: 700; color: var(--danger);">Rp {{ l.outstanding_amount }}</td>
+          <td>{{ l.tenor_months }} bln</td>
+          <td style="font-weight: 600;">Rp {{ l.monthly_installment }}</td>
+          <td><span class="badge badge-active">{{ l.status }}</span></td>
+          <td>
+            <a href="/loans/{{ l.id }}" class="btn btn-secondary btn-sm">Jadwal Angsuran & Dokumen</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" style="text-align: center; padding: 24px;" class="text-muted">
+            Belum ada pinjaman aktif.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Loan Applications -->
+<div class="card">
+  <div class="card-title">Daftar Pengajuan Pinjaman (Workflow Status)</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>No. Pengajuan</th>
+          <th>Nama Pemohon</th>
+          <th>Nominal Diajukan</th>
+          <th>Tenor</th>
+          <th>Angsuran / Bln</th>
+          <th>Tahap Saat Ini</th>
+          <th>Status Pengajuan</th>
+          <th>Tgl Diajukan</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for app in applications %}
+        <tr>
+          <td><code>{{ app.application_number }}</code></td>
+          <td><strong>{{ app.member_name }}</strong></td>
+          <td style="font-weight: 600;">Rp {{ app.amount }}</td>
+          <td>{{ app.tenor_months }} Bulan</td>
+          <td>Rp {{ app.monthly_installment }}</td>
+          <td><span class="badge badge-secondary">{{ app.current_step }}</span></td>
+          <td><span class="badge badge-{{ app.status | lower }}">{{ app.status }}</span></td>
+          <td style="font-size: 0.8rem; color: var(--gray-600);">{{ app.submitted_at }}</td>
+          <td>
+            <a href="/loans/application/{{ app.id }}" class="btn btn-primary btn-sm">Detail & Timeline</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" style="text-align: center; padding: 24px;" class="text-muted">
+            Belum ada permohonan pinjaman.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

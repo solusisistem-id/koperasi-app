@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Pencairan Pinjaman (Bendahara) - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>💳 Antrean Pencairan Pinjaman (Disbursement)</h1>
+    <p class="text-muted">Khusus Bendahara: Pencairan dana pinjaman yang telah disetujui lengkap oleh Atasan dan Ketua Koperasi.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Daftar Pengajuan Siap Cair (Waiting Disbursement)</span>
+    <span class="badge badge-warning">{{ queue | length }} Menunggu Cair</span>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>No. Pengajuan</th>
+          <th>Nama Anggota</th>
+          <th>Nomor Anggota</th>
+          <th>Nominal Pokok Cair</th>
+          <th>Tenor</th>
+          <th>Rekening Bank Tujuan</th>
+          <th>Aksi Pencairan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for app in queue %}
+        <tr>
+          <td><code>{{ app.application_number }}</code></td>
+          <td><strong>{{ app.member_name }}</strong></td>
+          <td>{{ app.member_number }}</td>
+          <td style="font-weight: 700; font-size: 1.1rem; color: var(--primary);">Rp {{ app.amount }}</td>
+          <td>{{ app.tenor_months }} Bulan</td>
+          <td><strong>{{ app.bank_account or 'Kas Koperasi' }}</strong></td>
+          <td>
+            <form method="POST" action="/disbursement/{{ app.id }}">
+              <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Konfirmasi pencairan dana Rp {{ app.amount }} ke anggota {{ app.member_name }}? Aksi ini akan mengaktifkan pinjaman dan membentuk dokumen SK & token verifikasi.')">
+                💸 Cairkan Pinjaman
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 32px;" class="text-muted">
+            Tidak ada pengajuan pinjaman yang menunggu pencairan dana.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

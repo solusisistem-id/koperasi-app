@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Laporan & Audit Trail - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>📈 Pusat Laporan & Audit Trail</h1>
+    <p class="text-muted">Laporan operasional koperasi, konsolidasi simpanan, pinjaman, arus kas, dan jejak audit.</p>
+  </div>
+</div>
+
+<!-- Tabs for Reports -->
+<div style="margin-bottom: 20px; border-bottom: 1px solid var(--gray-200); display: flex; gap: 16px;">
+  <a href="/reports?tab=savings" class="btn {% if active_subtab == 'savings' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">💰 Laporan Simpanan</a>
+  <a href="/reports?tab=financials" class="btn {% if active_subtab == 'financials' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">💵 Arus Kas (Inflow / Outflow)</a>
+  <a href="/reports?tab=members" class="btn {% if active_subtab == 'members' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">👥 Laporan Anggota</a>
+  <a href="/reports?tab=audit" class="btn {% if active_subtab == 'audit' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">🛡️ Jejak Audit (Audit Trail)</a>
+</div>
+
+{% if active_subtab == 'savings' %}
+<!-- Savings Reconciliation Report -->
+<div class="grid grid-cols-3" style="margin-bottom: 20px;">
+  {% for st in savings_report.by_type %}
+  <div class="stat-card">
+    <div class="stat-title">Simpanan {{ st.account_type }}</div>
+    <div class="stat-value" style="color: var(--success);">{{ st.formatted_balance }}</div>
+    <div class="stat-sub">{{ st.account_count }} Rekening Terdaftar</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <div class="card-title">Mutasi Simpanan Terkini (Konsolidasi Buku Besar)</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Tanggal</th>
+          <th>Anggota</th>
+          <th>Tipe Simpanan</th>
+          <th>Jenis</th>
+          <th>Nominal</th>
+          <th>Saldo Akhir</th>
+          <th>Referensi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in savings_report.recent_transactions %}
+        <tr>
+          <td>#{{ tx.id }}</td>
+          <td>{{ tx.transaction_date }}</td>
+          <td><strong>{{ tx.member_name }}</strong> ({{ tx.member_number }})</td>
+          <td>Simpanan {{ tx.account_type }}</td>
+          <td><span class="badge badge-{{ 'success' if tx.transaction_type == 'CREDIT' else 'danger' }}">{{ tx.transaction_type }}</span></td>
+          <td style="font-weight: 700; color: {% if tx.transaction_type == 'CREDIT' %}var(--success){% else %}var(--danger){% endif %};">
+            {{ tx.formatted_amount }}
+          </td>
+          <td style="font-weight: 600;">{{ tx.formatted_balance_after }}</td>
+          <td><code>{{ tx.reference_type }}</code> ({{ tx.reference_id or '-' }})</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% elif active_subtab == 'financials' %}
+<!-- Financial Cash Flow Report -->
+<div class="grid grid-cols-3" style="margin-bottom: 20px;">
+  <div class="stat-card">
+    <div class="stat-title">Total Arus Masuk (Inflow)</div>
+    <div class="stat-value" style="color: var(--success);">{{ financial_report.total_inflow }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-title">Total Arus Keluar (Outflow)</div>
+    <div class="stat-value" style="color: var(--danger);">{{ financial_report.total_outflow }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-title">Saldo Kas Bersih Koperasi</div>
+    <div class="stat-value" style="color: var(--primary);">{{ financial_report.net_balance }}</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Jurnal Transaksi Kas Operasional (Idempotent Ledger)</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>No. Transaksi</th>
+          <th>Waktu</th>
+          <th>Aliran</th>
+          <th>Kategori</th>
+          <th>Nominal</th>
+          <th>Keterangan</th>
+          <th>Operator</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ft in financial_report.transactions %}
+        <tr>
+          <td><code>{{ ft.transaction_number }}</code></td>
+          <td style="font-size: 0.8rem; color: var(--gray-600);">{{ ft.created_at }}</td>
+          <td><span class="badge badge-{{ 'success' if ft.transaction_type == 'INFLOW' else 'danger' }}">{{ ft.transaction_type }}</span></td>
+          <td><code>{{ ft.category }}</code></td>
+          <td style="font-weight: 700;">{{ ft.formatted_amount }}</td>
+          <td>{{ ft.description or '-' }}</td>
+          <td>{{ ft.created_by_name or 'System' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% elif active_subtab == 'members' %}
+<!-- Members Report -->
+<div class="card">
+  <div class="card-title">Laporan Posisi Keuangan Per Anggota</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>No. Anggota</th>
+          <th>Nama Lengkap</th>
+          <th>NIK</th>
+          <th>Departemen</th>
+          <th>Total Simpanan</th>
+          <th>Sisa Pinjaman Aktif</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in members_report %}
+        <tr>
+          <td><strong>{{ m.member_number }}</strong></td>
+          <td>{{ m.name }}</td>
+          <td><code>{{ m.nik }}</code></td>
+          <td>{{ m.department_name or '-' }}</td>
+          <td style="font-weight: 700; color: var(--success);">{{ m.formatted_savings }}</td>
+          <td style="font-weight: 700; color: var(--danger);">{{ m.formatted_loans }}</td>
+          <td><span class="badge badge-active">{{ m.membership_status }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% elif active_subtab == 'audit' %}
+<!-- Audit Trail Report -->
+<div class="card">
+  <div class="card-title">Jejak Audit Keamanan & Finansial (Audit Logs)</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Waktu (UTC)</th>
+          <th>Aktor</th>
+          <th>Peran</th>
+          <th>Aksi</th>
+          <th>Entitas</th>
+          <th>ID Entitas</th>
+          <th>Hasil</th>
+          <th>Detail Perubahan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in audit_report %}
+        <tr>
+          <td>#{{ a.id }}</td>
+          <td style="font-size: 0.8rem; color: var(--gray-600);">{{ a.timestamp }}</td>
+          <td><strong>{{ a.actor_name or 'System' }}</strong></td>
+          <td><code>{{ a.actor_role or '-' }}</code></td>
+          <td><strong>{{ a.action }}</strong></td>
+          <td>{{ a.entity }}</td>
+          <td>{{ a.entity_id or '-' }}</td>
+          <td><span class="badge badge-{{ 'success' if a.result == 'SUCCESS' else 'danger' }}">{{ a.result }}</span></td>
+          <td style="font-size: 0.75rem; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            {{ a.after_state_json or a.before_state_json or '-' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

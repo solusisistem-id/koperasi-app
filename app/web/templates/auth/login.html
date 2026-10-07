@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Masuk - Koperasi Core{% endblock %}
+
+{% block guest_content %}
+<div class="card" style="width: 100%; max-width: 440px; box-shadow: var(--shadow-md);">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <h1 style="font-size: 1.6rem; color: var(--primary);">🏛️ Koperasi Core</h1>
+    <p class="text-muted" style="margin-top: 4px;">Aplikasi Koperasi Employee Management</p>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+  {% if success %}
+  <div class="alert alert-success">{{ success }}</div>
+  {% endif %}
+
+  <form method="POST" action="/login">
+    <div class="form-group">
+      <label class="form-label" for="email">Alamat Email</label>
+      <input type="email" id="email" name="email" class="form-control" placeholder="nama@koperasi.local" required autofocus>
+    </div>
+
+    <div class="form-group">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <label class="form-label" for="password" style="margin-bottom: 0;">Password</label>
+        <a href="/forgot-password" style="font-size: 0.8rem; color: var(--primary); text-decoration: none;">Lupa Password?</a>
+      </div>
+      <input type="password" id="password" name="password" class="form-control" placeholder="••••••••" required>
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="width: 100%; padding: 11px; margin-top: 10px;">
+      Masuk ke Aplikasi
+    </button>
+  </form>
+
+  <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--gray-200); font-size: 0.8rem; color: var(--gray-600);">
+    <strong>Akun Demo Tersedia:</strong>
+    <ul style="margin-left: 18px; margin-top: 6px; line-height: 1.6;">
+      <li>Super Admin: <code>superadmin@koperasi.local</code> / <code>SuperAdmin123!</code></li>
+      <li>Admin Koperasi: <code>admin@koperasi.local</code> / <code>Admin123!</code></li>
+      <li>Ketua: <code>ketua@koperasi.local</code> / <code>Ketua123!</code></li>
+      <li>Bendahara: <code>bendahara@koperasi.local</code> / <code>Bendahara123!</code></li>
+      <li>Atasan / Manager: <code>manager.budi@koperasi.local</code> / <code>Manager123!</code></li>
+      <li>Anggota: <code>member.andi@koperasi.local</code> / <code>Member123!</code></li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
