@@ -74,7 +74,26 @@ from app.reports.service import (
 from app.database import get_db
 
 router = APIRouter()
-templates = Jinja2Templates(directory="koperasi_core/app/web/templates")
+import os
+import inspect
+
+TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+_orig_template_response = templates.TemplateResponse
+def _safe_template_response(*args, **kwargs):
+    if args and isinstance(args[0], str):
+        name = args[0]
+        ctx = args[1] if len(args) > 1 else kwargs.get("context", {})
+        req = ctx.get("request") if isinstance(ctx, dict) else kwargs.get("request")
+        params = list(inspect.signature(_orig_template_response).parameters.values())
+        if params and params[0].name == "request":
+            return _orig_template_response(req, name, ctx, *args[2:], **kwargs)
+        else:
+            return _orig_template_response(name, ctx, *args[2:], **kwargs)
+    return _orig_template_response(*args, **kwargs)
+
+templates.TemplateResponse = _safe_template_response
 
 def get_current_user_optional(request: Request) -> Optional[dict]:
     token = request.cookies.get(SESSION_COOKIE_NAME)
