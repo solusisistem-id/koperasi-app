@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Pinjaman Aktif {{ loan.loan.loan_number }} - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>Pinjaman Aktif: {{ loan.loan.loan_number }}</h1>
+    <p class="text-muted">Peminjam: <strong>{{ loan.loan.member_name }}</strong> ({{ loan.loan.member_number }})</p>
+  </div>
+  <div>
+    <a href="/loans" class="btn btn-secondary btn-sm">← Kembali ke Pinjaman</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-4" style="margin-bottom: 24px;">
+  <div class="stat-card">
+    <div class="stat-title">Pokok Pinjaman Cair</div>
+    <div class="stat-value" style="color: var(--primary);">{{ loan.loan.formatted_principal }}</div>
+    <div class="stat-sub">Tanggal Mulai: {{ loan.loan.start_date }}</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-title">Total Kewajiban (Pokok+Bunga)</div>
+    <div class="stat-value">{{ loan.loan.formatted_total }}</div>
+    <div class="stat-sub">Tenor: {{ loan.loan.tenor_months }} Bulan</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-title">Sisa Saldo (Outstanding)</div>
+    <div class="stat-value" style="color: var(--danger);">{{ loan.loan.formatted_outstanding }}</div>
+    <div class="stat-sub">Jatuh Tempo: {{ loan.loan.due_date }}</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-title">Status Pinjaman</div>
+    <div class="stat-value" style="font-size: 1.3rem;">
+      <span class="badge badge-{{ 'active' if loan.loan.status == 'ACTIVE' else 'success' }}">{{ loan.loan.status }}</span>
+    </div>
+    <div class="stat-sub">Nominal Angsuran: {{ loan.loan.formatted_monthly }} / bln</div>
+  </div>
+</div>
+
+<!-- Installment Schedule Table -->
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-title">
+    <span>📅 Jadwal Angsuran & Riwayat Pembayaran</span>
+    <span class="text-muted" style="font-size: 0.85rem;">Transaksi dilengkapi proteksi idempotency key (anti ganda).</span>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Ke</th>
+          <th>Jatuh Tempo</th>
+          <th>Tagihan Angsuran</th>
+          <th>Pokok</th>
+          <th>Bunga</th>
+          <th>Telah Dibayar</th>
+          <th>Waktu Bayar</th>
+          <th>Status</th>
+          <th>Aksi Pembayaran</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inst in loan.installments %}
+        <tr>
+          <td><strong>#{{ inst.installment_number }}</strong></td>
+          <td>{{ inst.due_date }}</td>
+          <td style="font-weight: 600;">{{ inst.formatted_amount }}</td>
+          <td style="font-size: 0.85rem; color: var(--gray-600);">Rp {{ inst.principal_portion }}</td>
+          <td style="font-size: 0.85rem; color: var(--gray-600);">Rp {{ inst.interest_portion }}</td>
+          <td style="font-weight: 600; color: var(--success);">{{ inst.formatted_paid }}</td>
+          <td style="font-size: 0.8rem; color: var(--gray-600);">{{ inst.paid_at or '-' }}</td>
+          <td>
+            <span class="badge badge-{{ 'paid' if inst.status == 'PAID' else 'pending' }}">
+              {{ inst.status }}
+            </span>
+          </td>
+          <td>
+            {% if inst.status != 'PAID' %}
+            <form method="POST" action="/loans/installment/{{ inst.id }}/pay" style="display: inline;">
+              <input type="hidden" name="paid_amount" value="{{ inst.amount }}">
+              <input type="hidden" name="idempotency_key" value="{{ inst.idempotency_key }}">
+              <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Bayar angsuran ke-{{ inst.installment_number }} sebesar {{ inst.formatted_amount }}?')">
+                Bayar Sekarang
+              </button>
+            </form>
+            {% else %}
+            <span style="font-size: 0.8rem; color: var(--success); font-weight: 600;">✔ LUNAS</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Document & QR Verification Card -->
+{% if loan.document %}
+<div class="card" style="background-color: var(--gray-50); border: 1px solid var(--gray-300);">
+  <div class="card-title">
+    <span>📜 Dokumen Sah: {{ loan.document.title }}</span>
+    <span class="badge badge-success">TERVERIFIKASI SISTEM</span>
+  </div>
+  <div class="grid grid-cols-2" style="align-items: center;">
+    <div>
+      <p style="font-size: 0.9rem; line-height: 1.7; color: var(--gray-700);">
+        Dokumen ini diterbitkan secara resmi oleh Koperasi Core dengan nomor <strong>{{ loan.document.document_number }}</strong>.<br>
+        Keaslian dokumen ini dapat diverifikasi menggunakan QR Token acak server-side tanpa mengekspos data pribadi anggota ke publik.
+      </p>
+      <div style="margin-top: 12px;">
+        <a href="/verify/{{ loan.document.token }}" target="_blank" class="btn btn-secondary btn-sm">
+          🔍 Buka Halaman Verifikasi Publik (/verify/{{ loan.document.token }})
+        </a>
+      </div>
+    </div>
+    <div style="text-align: center; padding: 16px; background-color: white; border: 1px solid var(--gray-300); border-radius: var(--radius-md);">
+      <div style="font-size: 2.5rem; margin-bottom: 4px;">📱</div>
+      <div style="font-weight: 600; font-size: 0.85rem;">Token Verifikasi QR:</div>
+      <code style="font-size: 0.9rem; color: var(--primary); font-weight: 700; word-break: break-all;">
+        {{ loan.document.token }}
+      </code>
+      <div style="font-size: 0.75rem; color: var(--gray-600); margin-top: 6px;">
+        Server-side Source of Truth | Anti Pemalsuan
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

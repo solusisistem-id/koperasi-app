@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Perekaman Saldo Awal Simpanan - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>📥 Perekaman Saldo Awal (Opening Balance Ledger)</h1>
+    <p class="text-muted">Pencatatan saldo migrasi sebagai transaksi kredit awal agar sejarah finansial tetap terlacak.</p>
+  </div>
+  <div>
+    <a href="/savings/opening-balance/template?format=xlsx" class="btn btn-secondary btn-sm">📄 Download Template Saldo Awal (.xlsx)</a>
+    <a href="/savings" class="btn btn-secondary btn-sm">← Kembali</a>
+  </div>
+</div>
+
+<div class="grid grid-cols-3">
+  <div class="card" style="grid-column: span 2;">
+    <div class="card-title">Form Input Saldo Awal Anggota</div>
+    <form method="POST" action="/savings/opening-balance">
+      <div class="grid grid-cols-2">
+        <div class="form-group">
+          <label class="form-label" for="member_id">Pilih Anggota *</label>
+          <select id="member_id" name="member_id" class="form-control" required>
+            {% for m in members %}
+            <option value="{{ m.id }}" {% if selected_member_id == m.id %}selected{% endif %}>
+              {{ m.member_number }} - {{ m.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="account_type">Tipe Simpanan *</label>
+          <select id="account_type" name="account_type" class="form-control" required>
+            <option value="POKOK">Simpanan POKOK</option>
+            <option value="WAJIB">Simpanan WAJIB</option>
+            <option value="SUKARELA">Simpanan SUKARELA</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="amount">Nominal Saldo Awal (Rp) *</label>
+          <input type="number" id="amount" name="amount" class="form-control" placeholder="cth: 500000" min="1000" step="1000" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="effective_date">Tanggal Efektif Saldo Awal *</label>
+          <input type="date" id="effective_date" name="effective_date" class="form-control" value="{{ today }}" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="reference">Kode Referensi / Dokumen</label>
+          <input type="text" id="reference" name="reference" class="form-control" placeholder="cth: OB-MIGRASI-2024">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="notes">Catatan Tambahan</label>
+          <input type="text" id="notes" name="notes" class="form-control" placeholder="cth: Saldo buku lama per 31 Des">
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="margin-top: 10px;">
+        💾 Simpan Transaksi Saldo Awal
+      </button>
+    </form>
+  </div>
+
+  <div class="card" style="background-color: var(--gray-50);">
+    <div class="card-title">ℹ️ Prinsip Akuntansi Saldo Awal</div>
+    <p style="font-size: 0.85rem; color: var(--gray-700); line-height: 1.6;">
+      Sesuai Standar Koperasi Core Blueprint V2:
+    </p>
+    <ul style="font-size: 0.85rem; color: var(--gray-700); line-height: 1.6; margin-left: 18px; margin-top: 8px;">
+      <li>Saldo <strong>TIDAK PERNAH</strong> diubah secara langsung via kolom statis.</li>
+      <li>Setiap saldo awal dicatat sebagai transaksi pembukuan kredit awal beridentitas <code>OPENING_BALANCE</code>.</li>
+      <li>Seluruh saldo simpanan dapat diuji dan direkonstruksi setiap saat dari mutasi transaksi.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

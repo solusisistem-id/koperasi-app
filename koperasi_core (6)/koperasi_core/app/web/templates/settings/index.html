@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}Pengaturan Aplikasi & Produk - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>⚙️ Pengaturan Koperasi & Kebijakan Produk</h1>
+    <p class="text-muted">Kelola identitas resmi lembaga, suku bunga pinjaman, iuran simpanan, pembagian SHU, dan cadangkan basis data.</p>
+  </div>
+  <div>
+    <a href="/settings/backup" class="btn btn-secondary btn-sm" download>
+      💾 Unduh Cadangan Data (Backup SQLite .db)
+    </a>
+  </div>
+</div>
+
+<form method="POST" action="/settings">
+  <!-- Tabs Navigation -->
+  <div style="margin-bottom: 20px; border-bottom: 1px solid var(--gray-200); display: flex; gap: 12px;">
+    <button type="button" class="btn btn-primary btn-sm tab-btn active" onclick="switchTab('tab_profile', this)">🏛️ Profil Lembaga</button>
+    <button type="button" class="btn btn-secondary btn-sm tab-btn" onclick="switchTab('tab_products', this)">💰 Simpan Pinjam</button>
+    <button type="button" class="btn btn-secondary btn-sm tab-btn" onclick="switchTab('tab_units', this)">🏪 Unit Usaha Toko</button>
+    <button type="button" class="btn btn-secondary btn-sm tab-btn" onclick="switchTab('tab_shu', this)">⚖️ Alokasi SHU RAT & Backup</button>
+  </div>
+
+  <!-- TAB 1: PROFIL & LEGALITAS -->
+  <div id="tab_profile" class="tab-content">
+    <div class="card">
+      <div class="card-title">1. Identitas Hukum & Kantor Koperasi</div>
+      <div class="grid grid-cols-2">
+        <div class="form-group" style="grid-column: span 2;">
+          <label class="form-label" for="cooperative_name">Nama Resmi Koperasi *</label>
+          <input type="text" id="cooperative_name" name="cooperative_name" class="form-control" value="{{ settings.cooperative_name }}" required>
+          <p class="form-helper">Nama lengkap yang terdaftar pada Kemenkumham dan Dinas Koperasi.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="legal_number">Nomor Badan Hukum / SK AHU</label>
+          <input type="text" id="legal_number" name="legal_number" class="form-control" value="{{ settings.legal_number }}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cooperative_nik">Nomor Induk Koperasi (NIK Kemenkop)</label>
+          <input type="text" id="cooperative_nik" name="cooperative_nik" class="form-control" value="{{ settings.cooperative_nik }}">
+        </div>
+
+        <div class="form-group" style="grid-column: span 2;">
+          <label class="form-label" for="office_address">Alamat Kantor Sekretariat</label>
+          <input type="text" id="office_address" name="office_address" class="form-control" value="{{ settings.office_address }}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="office_phone">Nomor Telepon Kantor</label>
+          <input type="text" id="office_phone" name="office_phone" class="form-control" value="{{ settings.office_phone }}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="office_email">Email Resmi Koperasi</label>
+          <input type="email" id="office_email" name="office_email" class="form-control" value="{{ settings.office_email }}">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Pejabat Penandatangan Dokumen Sah</div>
+      <div class="grid grid-cols-3">
+        <div class="form-group">
+          <label class="form-label" for="chief_name">Ketua Koperasi</label>
+          <input type="text" id="chief_name" name="chief_name" class="form-control" value="{{ settings.chief_name }}">
+          <p class="form-helper">Penandatangan SK Pinjaman & Laporan RAT.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="secretary_name">Sekretaris</label>
+          <input type="text" id="secretary_name" name="secretary_name" class="form-control" value="{{ settings.secretary_name }}">
+          <p class="form-helper">Penanggung jawab administrasi surat.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="treasurer_name">Bendahara</label>
+          <input type="text" id="treasurer_name" name="treasurer_name" class="form-control" value="{{ settings.treasurer_name }}">
+          <p class="form-helper">Otorisator pencairan kas & rekening.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: PRODUK SIMPAN PINJAM -->
+  <div id="tab_products" class="tab-content" style="display: none;">
+    <div class="card" style="border-left: 4px solid var(--primary);">
+      <div class="card-title">Ketentuan Produk Simpanan Anggota</div>
+      <div class="grid grid-cols-3">
+        <div class="form-group">
+          <label class="form-label" for="savings_pokok_amount">Simpanan Pokok (Rp)</label>
+          <input type="number" id="savings_pokok_amount" name="savings_pokok_amount" class="form-control" value="{{ settings.savings_pokok_amount }}" min="0" step="10000" required>
+          <p class="form-helper">Wajib setor saat masuk menjadi anggota.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="savings_wajib_amount">Simpanan Wajib Bulanan (Rp)</label>
+          <input type="number" id="savings_wajib_amount" name="savings_wajib_amount" class="form-control" value="{{ settings.savings_wajib_amount }}" min="0" step="5000" required>
+          <p class="form-helper">Iuran wajib rutin setiap bulan per anggota.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="savings_sukarela_min">Minimal Setoran Sukarela (Rp)</label>
+          <input type="number" id="savings_sukarela_min" name="savings_sukarela_min" class="form-control" value="{{ settings.savings_sukarela_min }}" min="0" step="5000" required>
+          <p class="form-helper">Nominal terendah sekali setor sukarela.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="border-left: 4px solid var(--success);">
+      <div class="card-title">Ketentuan Produk Pinjaman Reguler</div>
+      <div class="grid grid-cols-3">
+        <div class="form-group">
+          <label class="form-label" for="loan_interest_rate_monthly">Suku Bunga / Jasa Pinjaman (% per bulan)</label>
+          <input type="number" id="loan_interest_rate_monthly" name="loan_interest_rate_monthly" class="form-control" value="{{ settings.loan_interest_rate_monthly }}" step="0.1" min="0" required>
+          <p class="form-helper">Suku bunga flat per bulan (cth: 1.0 = 1%).</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="loan_admin_fee_percent">Biaya Administrasi Pencairan (%)</label>
+          <input type="number" id="loan_admin_fee_percent" name="loan_admin_fee_percent" class="form-control" value="{{ settings.loan_admin_fee_percent }}" step="0.1" min="0" required>
+          <p class="form-helper">Potongan administrasi saat dana dicairkan.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="loan_max_tenor_months">Tenor Maksimal (Bulan)</label>
+          <input type="number" id="loan_max_tenor_months" name="loan_max_tenor_months" class="form-control" value="{{ settings.loan_max_tenor_months }}" min="3" max="60" required>
+          <p class="form-helper">Batas maksimal jangka waktu angsuran.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="loan_max_amount">Plafon Maksimal Pinjaman (Rp)</label>
+          <input type="number" id="loan_max_amount" name="loan_max_amount" class="form-control" value="{{ settings.loan_max_amount }}" min="1000000" step="500000" required>
+          <p class="form-helper">Batas nominal tertinggi pengajuan per anggota.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="loan_require_manager">Wajib Persetujuan Atasan Langsung</label>
+          <select id="loan_require_manager" name="loan_require_manager" class="form-control">
+            <option value="1" {% if settings.loan_require_manager == '1' %}selected{% endif %}>Ya (Wajib lewat Manager dulu)</option>
+            <option value="0" {% if settings.loan_require_manager == '0' %}selected{% endif %}>Tidak (Langsung ke Ketua Koperasi)</option>
+          </select>
+          <p class="form-helper">Alur Maker-Checker hierarki kepegawaian.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: UNIT USAHA -->
+  <div id="tab_units" class="tab-content" style="display: none;">
+    <div class="card" style="border-left: 4px solid var(--warning);">
+      <div class="card-title">Kebijakan Unit Toko & Fotocopy</div>
+      <div class="grid grid-cols-2">
+        <div class="form-group">
+          <label class="form-label" for="store_credit_limit">Plafon Belanja Potong Gaji per Bulan (Rp)</label>
+          <input type="number" id="store_credit_limit" name="store_credit_limit" class="form-control" value="{{ settings.store_credit_limit }}" min="100000" step="50000" required>
+          <p class="form-helper">Batas maksimal bon belanja toko/fotocopy per anggota yang dipotong dari gaji bulanan.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cutoff_day">Tanggal Tutup Buku / Cut-off Bulanan</label>
+          <input type="number" id="cutoff_day" name="cutoff_day" class="form-control" value="{{ settings.cutoff_day }}" min="1" max="31" required>
+          <p class="form-helper">Tanggal rekap tagihan diserahkan ke bagian Payroll kantor.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: ALOKASI SHU RAT & BACKUP -->
+  <div id="tab_shu" class="tab-content" style="display: none;">
+    <div class="card" style="border-left: 4px solid var(--success);">
+      <div class="card-title">Persentase Pembagian SHU RAT (Wajib Total 100%)</div>
+      <div class="grid grid-cols-3">
+        <div class="form-group">
+          <label class="form-label" for="shu_cadangan_percent">Dana Cadangan Koperasi (%)</label>
+          <input type="number" id="shu_cadangan_percent" name="shu_cadangan_percent" class="form-control shu-input" value="{{ settings.shu_cadangan_percent }}" min="0" max="100" oninput="checkShuTotal()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="shu_jasa_modal_percent">Jasa Modal Anggota / Simpanan (%)</label>
+          <input type="number" id="shu_jasa_modal_percent" name="shu_jasa_modal_percent" class="form-control shu-input" value="{{ settings.shu_jasa_modal_percent }}" min="0" max="100" oninput="checkShuTotal()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="shu_jasa_usaha_percent">Jasa Usaha Anggota / Transaksi (%)</label>
+          <input type="number" id="shu_jasa_usaha_percent" name="shu_jasa_usaha_percent" class="form-control shu-input" value="{{ settings.shu_jasa_usaha_percent }}" min="0" max="100" oninput="checkShuTotal()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="shu_pengurus_percent">Jasa Pengurus, Pengawas & Karyawan (%)</label>
+          <input type="number" id="shu_pengurus_percent" name="shu_pengurus_percent" class="form-control shu-input" value="{{ settings.shu_pengurus_percent }}" min="0" max="100" oninput="checkShuTotal()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="shu_pendidikan_percent">Dana Pendidikan Koperasi (%)</label>
+          <input type="number" id="shu_pendidikan_percent" name="shu_pendidikan_percent" class="form-control shu-input" value="{{ settings.shu_pendidikan_percent }}" min="0" max="100" oninput="checkShuTotal()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="shu_sosial_percent">Dana Sosial & Lingkungan (%)</label>
+          <input type="number" id="shu_sosial_percent" name="shu_sosial_percent" class="form-control shu-input" value="{{ settings.shu_sosial_percent }}" min="0" max="100" oninput="checkShuTotal()">
+        </div>
+      </div>
+
+      <div style="background-color: var(--gray-50); padding: 12px; border-radius: var(--radius-md); margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+        <span>Total Persentase SHU:</span>
+        <strong id="shu_total_display" style="font-size: 1.1rem; color: var(--success);">100%</strong>
+      </div>
+    </div>
+
+    <!-- Backup Card -->
+    <div class="card" style="background-color: var(--gray-50);">
+      <div class="card-title">💾 Cadangkan Data Basis Data (Disaster Recovery)</div>
+      <p style="font-size: 0.9rem; color: var(--gray-700); margin-bottom: 16px;">
+        Unduh seluruh rekaman transaksi, saldo simpanan, pinjaman, dan data anggota ke komputer lokal Anda untuk disimpan di Google Drive atau flashdisk pengurus secara berkala.
+      </p>
+      <a href="/settings/backup" class="btn btn-secondary" download>
+        ⬇️ Unduh Berkas Cadangan Basis Data Sekarang (.db)
+      </a>
+    </div>
+  </div>
+
+  <!-- Submit Buttons -->
+  <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--gray-200);">
+    <button type="submit" class="btn btn-primary" style="padding: 10px 24px;">
+      💾 Simpan Seluruh Pengaturan
+    </button>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(el => {
+    el.classList.remove('active', 'btn-primary');
+    el.classList.add('btn-secondary');
+  });
+  document.getElementById(tabId).style.display = 'block';
+  btn.classList.add('active', 'btn-primary');
+  btn.classList.remove('btn-secondary');
+}
+
+function checkShuTotal() {
+  const inputs = document.querySelectorAll('.shu-input');
+  let sum = 0;
+  inputs.forEach(i => sum += parseFloat(i.value) || 0);
+  const display = document.getElementById('shu_total_display');
+  display.innerText = sum + "%";
+  if (sum === 100) {
+    display.style.color = "var(--success)";
+  } else {
+    display.style.color = "var(--danger)";
+  }
+}
+</script>
+{% endblock %}

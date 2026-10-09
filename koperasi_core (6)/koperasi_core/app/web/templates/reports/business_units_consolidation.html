@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Laporan Konsolidasi & SHU (RAT) - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>📊 Laporan Konsolidasi Global & Perhitungan SHU Anggota</h1>
+    <p class="text-muted">Penggabungan kinerja Unit Simpan Pinjam, Unit Toko, dan Unit Fotocopy untuk Rapat Anggota Tahunan (RAT).</p>
+  </div>
+  <div style="display: flex; gap: 10px;">
+    <button onclick="window.print()" class="btn btn-secondary btn-sm">🖨️ Cetak Laporan RAT & Slip SHU</button>
+    <a href="/business-units" class="btn btn-secondary btn-sm">← Kembali ke Unit Usaha</a>
+  </div>
+</div>
+
+<!-- Highlight Stat Cards -->
+<div class="grid grid-cols-4" style="margin-bottom: 24px;">
+  <div class="stat-card" style="border-top: 4px solid var(--primary);">
+    <div class="stat-title">Total Pendapatan / Omzet Gabungan</div>
+    <div class="stat-value" style="color: var(--primary);">{{ data.consolidated.total_revenue }}</div>
+    <div class="stat-sub">Simpan Pinjam + Toko + Fotocopy</div>
+  </div>
+
+  <div class="stat-card" style="border-top: 4px solid var(--success);">
+    <div class="stat-title">Total SHU / Laba Bersih Konsolidasi</div>
+    <div class="stat-value" style="color: var(--success);">{{ data.consolidated.net_profit }}</div>
+    <div class="stat-sub">Siap dialokasikan untuk RAT</div>
+  </div>
+
+  <div class="stat-card" style="border-top: 4px solid #8b5cf6;">
+    <div class="stat-title">Total Kekayaan / Aset Koperasi</div>
+    <div class="stat-value" style="color: #6d28d9;">{{ data.consolidated.total_assets }}</div>
+    <div class="stat-sub">Kas + Piutang Pinjaman + Stok + Peralatan</div>
+  </div>
+
+  <div class="stat-card" style="border-top: 4px solid var(--warning);">
+    <div class="stat-title">Total SHU Dibagi ke Anggota</div>
+    <div class="stat-value" style="color: var(--warning);">{{ shu_breakdown.pool_jasa_modal }} + {{ shu_breakdown.pool_jasa_usaha }}</div>
+    <div class="stat-sub">Jasa Modal (20%) + Jasa Usaha (20%)</div>
+  </div>
+</div>
+
+<!-- Breakdown Table per Unit Usaha -->
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-title">1. Kontribusi Kinerja Per Unit Usaha (Tahun Buku {{ data.year }})</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Nama Unit Usaha</th>
+          <th>Total Omzet / Pendapatan</th>
+          <th>HPP (Biaya Modal Barang)</th>
+          <th>Biaya Operasional</th>
+          <th>Laba Bersih Unit</th>
+          <th>Posisi Harta / Aset Unit</th>
+          <th>Kontribusi SHU</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Unit Simpan Pinjam -->
+        <tr>
+          <td><strong>🏛️ {{ data.usp.name }}</strong></td>
+          <td>{{ data.usp.revenue }}</td>
+          <td>{{ data.usp.cogs }}</td>
+          <td>{{ data.usp.opex }}</td>
+          <td style="font-weight: 700; color: var(--success);">{{ data.usp.net_profit }}</td>
+          <td>{{ data.usp.assets }}</td>
+          <td><span class="badge badge-success">OTOMATIS LEDGER</span></td>
+        </tr>
+
+        <!-- Unit Toko & Fotocopy -->
+        {% for u in data.units %}
+        <tr>
+          <td><strong>{% if u.code == 'TOKO' %}🛒{% else %}🖨️{% endif %} {{ u.name }}</strong></td>
+          <td>{{ u.revenue }}</td>
+          <td>{{ u.cogs }}</td>
+          <td>{{ u.opex }}</td>
+          <td style="font-weight: 700; color: var(--success);">{{ u.net_profit }}</td>
+          <td>{{ u.assets }}</td>
+          <td><span class="badge badge-secondary">REKAP UNIT</span></td>
+        </tr>
+        {% endfor %}
+
+        <!-- Total Row -->
+        <tr style="background-color: var(--gray-100); font-weight: 700; border-top: 2px solid var(--gray-300);">
+          <td>TOTAL KONSOLIDASI KOPERASI</td>
+          <td style="color: var(--primary);">{{ data.consolidated.total_revenue }}</td>
+          <td>{{ data.consolidated.total_cogs }}</td>
+          <td>{{ data.consolidated.total_opex }}</td>
+          <td style="color: var(--success); font-size: 1.05rem;">{{ data.consolidated.net_profit }}</td>
+          <td style="color: #6d28d9; font-size: 1.05rem;">{{ data.consolidated.total_assets }}</td>
+          <td>-</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid grid-cols-2" style="margin-bottom: 24px;">
+  <!-- Neraca Konsolidasi -->
+  <div class="card">
+    <div class="card-title">2. Neraca Konsolidasi (Posisi Keuangan)</div>
+    <div class="table-container">
+      <table>
+        <tbody>
+          <tr><th style="width: 240px;">Kas & Bank Gabungan</th><td style="font-weight: 600;">{{ data.consolidated.cash }}</td></tr>
+          <tr><th>Piutang Pinjaman & Usaha</th><td style="font-weight: 600;">{{ data.consolidated.receivables }}</td></tr>
+          <tr><th>Persediaan / Stok Barang Toko & Kertas</th><td style="font-weight: 600;">{{ data.consolidated.inventory }}</td></tr>
+          <tr><th>Aset Tetap & Peralatan (Mesin/Rak)</th><td style="font-weight: 600;">{{ data.consolidated.fixed_assets }}</td></tr>
+          <tr style="background-color: var(--gray-50); border-top: 2px solid var(--gray-300);">
+            <th>TOTAL AKTIVA / ASET KOPERASI</th>
+            <td style="font-weight: 800; font-size: 1.1rem; color: #6d28d9;">{{ data.consolidated.total_assets }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alokasi SHU untuk RAT -->
+  <div class="card" style="border: 2px solid var(--success); background-color: var(--success-light);">
+    <div class="card-title" style="color: var(--success);">
+      <span>3. Alokasi Pembagian SHU (Standar UU Koperasi)</span>
+      <span class="badge badge-success">TOTAL: {{ data.shu.total_shu }}</span>
+    </div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Pos Alokasi SHU</th>
+            <th>Persentase</th>
+            <th>Nominal Dibagikan</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Dana Cadangan Koperasi</strong></td>
+            <td>40%</td>
+            <td style="font-weight: 700;">{{ data.shu.dana_cadangan }}</td>
+          </tr>
+          <tr>
+            <td><strong>Jasa Modal Anggota (Simpanan)</strong></td>
+            <td>20%</td>
+            <td style="font-weight: 700; color: var(--primary);">{{ data.shu.jasa_modal }}</td>
+          </tr>
+          <tr>
+            <td><strong>Jasa Usaha Anggota (Belanja & Pinjam)</strong></td>
+            <td>20%</td>
+            <td style="font-weight: 700; color: var(--primary);">{{ data.shu.jasa_usaha }}</td>
+          </tr>
+          <tr>
+            <td><strong>Jasa Pengurus, Pengawas & Karyawan</strong></td>
+            <td>10%</td>
+            <td style="font-weight: 600;">{{ data.shu.pengurus_pengawas }}</td>
+          </tr>
+          <tr>
+            <td><strong>Dana Pendidikan Koperasi</strong></td>
+            <td>5%</td>
+            <td style="font-weight: 600;">{{ data.shu.dana_pendidikan }}</td>
+          </tr>
+          <tr>
+            <td><strong>Dana Sosial & Lingkungan</strong></td>
+            <td>5%</td>
+            <td style="font-weight: 600;">{{ data.shu.dana_sosial }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 4: SHU PER ANGGOTA -->
+<div class="card" style="border-top: 4px solid var(--primary);">
+  <div class="card-title">
+    <span>4. Rincian Pembagian SHU Per Masing-Masing Anggota (Tahun Buku {{ data.year }})</span>
+    <span class="badge badge-success">Total Dibagikan: {{ shu_breakdown.total_distributed }}</span>
+  </div>
+  <p class="text-muted" style="margin-bottom: 16px;">
+    Rumus pembagian: <strong>Total SHU Anggota = Jasa Modal (dari simpanan) + Jasa Usaha (dari kontribusi bunga pinjaman/belanja)</strong>.
+  </p>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>No. Anggota</th>
+          <th>Nama Anggota</th>
+          <th>NIK</th>
+          <th>Total Simpanan</th>
+          <th>Bagian Jasa Modal (20%)</th>
+          <th>Kontribusi Jasa Pinjaman</th>
+          <th>Bagian Jasa Usaha (20%)</th>
+          <th style="background-color: #ecfdf5; color: var(--success); font-weight: 700;">TOTAL SHU DITERIMA</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in shu_breakdown.members %}
+        <tr>
+          <td><strong>{{ m.member_number }}</strong></td>
+          <td>{{ m.name }}</td>
+          <td><code>{{ m.nik }}</code></td>
+          <td>{{ m.savings }}</td>
+          <td style="color: var(--primary); font-weight: 600;">{{ m.jasa_modal }}</td>
+          <td>{{ m.interest_paid }}</td>
+          <td style="color: var(--primary); font-weight: 600;">{{ m.jasa_usaha }}</td>
+          <td style="background-color: #ecfdf5; font-weight: 800; font-size: 1.05rem; color: var(--success);">
+            {{ m.total_shu }}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" style="text-align: center; padding: 24px;" class="text-muted">
+            Belum ada anggota aktif terdaftar untuk perhitungan SHU.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

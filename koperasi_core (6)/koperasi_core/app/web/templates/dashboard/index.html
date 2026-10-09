@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>Dashboard Koperasi</h1>
+    <p class="text-muted">Selamat datang, <strong>{{ current_user.full_name }}</strong></p>
+  </div>
+  <div>
+    {% if member_metrics %}
+    <a href="/loans/apply" class="btn btn-primary">➕ Ajukan Pinjaman Baru</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- 1. ANGGOTA VIEW -->
+{% if member_metrics %}
+<div style="margin-bottom: 32px;">
+  <h2>Ringkasan Keuangan Anggota</h2>
+  <div class="grid grid-cols-4">
+    <div class="stat-card">
+      <div class="stat-title">Total Saldo Simpanan</div>
+      <div class="stat-value" style="color: var(--success);">{{ member_metrics.savings_summary.formatted_total_balance }}</div>
+      <div class="stat-sub">Rekonstruksi riil dari ledger simpanan</div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-title">Sisa Pinjaman Aktif</div>
+      <div class="stat-value" style="color: var(--danger);">
+        {% if member_metrics.active_loan %}
+          {{ member_metrics.active_loan.formatted_outstanding }}
+        {% else %}
+          Rp 0
+        {% endif %}
+      </div>
+      <div class="stat-sub">
+        {% if member_metrics.active_loan %}
+          No: {{ member_metrics.active_loan.loan_number }}
+        {% else %}
+          Tidak ada pinjaman berjalan
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-title">Angsuran Berikutnya</div>
+      <div class="stat-value" style="color: var(--primary);">
+        {% if member_metrics.next_installment %}
+          {{ member_metrics.next_installment.formatted_amount }}
+        {% else %}
+          -
+        {% endif %}
+      </div>
+      <div class="stat-sub">
+        {% if member_metrics.next_installment %}
+          Jatuh Tempo: {{ member_metrics.next_installment.due_date }}
+        {% else %}
+          Semua angsuran lunas
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-title">Aksi Cepat</div>
+      <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+        <a href="/savings" class="btn btn-secondary btn-sm">Lihat Rekening Simpanan</a>
+        {% if member_metrics.active_loan %}
+        <a href="/loans/{{ member_metrics.active_loan.id }}" class="btn btn-primary btn-sm">Jadwal & Bayar Angsuran</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2" style="margin-top: 20px;">
+    <!-- Rincian Simpanan -->
+    <div class="card">
+      <div class="card-title">
+        <span>Rincian Rekening Simpanan</span>
+        <a href="/savings" class="btn btn-secondary btn-sm">Lihat Ledger</a>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Jenis Simpanan</th>
+              <th>No. Rekening</th>
+              <th>Saldo Tercatat</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for acc in member_metrics.savings_summary.accounts %}
+            <tr>
+              <td><strong>Simpanan {{ acc.account_type }}</strong></td>
+              <td><code>{{ acc.account_number }}</code></td>
+              <td style="font-weight: 600; color: var(--gray-900);">{{ acc.formatted_balance }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Riwayat Pengajuan Pinjaman -->
+    <div class="card">
+      <div class="card-title">
+        <span>Pengajuan Pinjaman Terakhir</span>
+        <a href="/loans" class="btn btn-secondary btn-sm">Semua Pengajuan</a>
+      </div>
+      {% if member_metrics.recent_applications %}
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>No. Pengajuan</th>
+              <th>Tenor</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for app in member_metrics.recent_applications %}
+            <tr>
+              <td><code>{{ app.application_number }}</code></td>
+              <td>{{ app.tenor_months }} bln</td>
+              <td>
+                <span class="badge badge-{{ app.status | lower }}">{{ app.status }}</span>
+              </td>
+              <td>
+                <a href="/loans/application/{{ app.id }}" class="btn btn-secondary btn-sm">Detail</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted" style="padding: 12px 0;">Belum ada pengajuan pinjaman aktif.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- 2. ATASAN / APPROVER VIEW -->
+{% if approver_metrics and ('ATASAN_APPROVER' in current_user.roles or 'SUPER_ADMIN' in current_user.roles) %}
+<div class="card" style="border-left: 4px solid var(--warning); margin-bottom: 24px;">
+  <div class="card-title">
+    <span>📋 Antrean Persetujuan Atasan (Bawahan Langsung)</span>
+    <span class="badge badge-warning">{{ approver_metrics.pending_subordinate_count }} Menunggu</span>
+  </div>
+  <p class="text-muted" style="margin-bottom: 16px;">Pengajuan pinjaman pegawai di bawah struktur organisasi Anda yang membutuhkan persetujuan.</p>
+  {% if approver_metrics.pending_subordinates %}
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>No. Pengajuan</th>
+          <th>Nama Pegawai</th>
+          <th>Nominal Pinjaman</th>
+          <th>Tenor</th>
+          <th>Keperluan</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in approver_metrics.pending_subordinates %}
+        <tr>
+          <td><code>{{ p.application_number }}</code></td>
+          <td><strong>{{ p.member_name }}</strong> ({{ p.member_number }})</td>
+          <td style="font-weight: 600;">Rp {{ p.amount }}</td>
+          <td>{{ p.tenor_months }} Bulan</td>
+          <td>{{ p.purpose }}</td>
+          <td>
+            <a href="/loans/application/{{ p.id }}" class="btn btn-primary btn-sm">Review & Keputusan</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Tidak ada pengajuan pinjaman bawahan yang menunggu persetujuan saat ini.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- 3. KETUA KOPERASI VIEW -->
+{% if ketua_metrics and ('KETUA' in current_user.roles or 'SUPER_ADMIN' in current_user.roles) %}
+<div style="margin-bottom: 32px;">
+  <h2>Ringkasan Eksekutif Ketua Koperasi</h2>
+  <div class="grid grid-cols-4" style="margin-bottom: 20px;">
+    <div class="stat-card">
+      <div class="stat-title">Total Anggota Aktif</div>
+      <div class="stat-value">{{ ketua_metrics.total_members }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Total Pinjaman Aktif</div>
+      <div class="stat-value">{{ ketua_metrics.total_active_loans }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Total Simpanan Koperasi</div>
+      <div class="stat-value" style="color: var(--success);">{{ ketua_metrics.total_savings }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Total Outstanding Piutang</div>
+      <div class="stat-value" style="color: var(--danger);">{{ ketua_metrics.total_outstanding }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="border-left: 4px solid var(--primary);">
+    <div class="card-title">
+      <span>⚖️ Antrean Keputusan Ketua Koperasi</span>
+      <span class="badge badge-primary">{{ ketua_metrics.pending_approval_count }} Menunggu</span>
+    </div>
+    {% if ketua_metrics.pending_applications %}
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>No. Pengajuan</th>
+            <th>Nama Anggota</th>
+            <th>Nominal</th>
+            <th>Tenor</th>
+            <th>Keperluan</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in ketua_metrics.pending_applications %}
+          <tr>
+            <td><code>{{ a.application_number }}</code></td>
+            <td><strong>{{ a.member_name }}</strong></td>
+            <td style="font-weight: 600;">Rp {{ a.amount }}</td>
+            <td>{{ a.tenor_months }} Bulan</td>
+            <td>{{ a.purpose }}</td>
+            <td>
+              <a href="/loans/application/{{ a.id }}" class="btn btn-primary btn-sm">Setujui / Tolak</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted">Tidak ada pengajuan pinjaman yang menunggu persetujuan Ketua.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- 4. BENDAHARA VIEW -->
+{% if bendahara_metrics and ('BENDAHARA' in current_user.roles or 'SUPER_ADMIN' in current_user.roles) %}
+<div style="margin-bottom: 32px;">
+  <h2>Panel Keuangan Bendahara</h2>
+  <div class="grid grid-cols-3" style="margin-bottom: 20px;">
+    <div class="stat-card">
+      <div class="stat-title">Total Arus Kas Masuk (Inflow)</div>
+      <div class="stat-value" style="color: var(--success);">{{ bendahara_metrics.total_inflow }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Total Arus Kas Keluar (Outflow)</div>
+      <div class="stat-value" style="color: var(--danger);">{{ bendahara_metrics.total_outflow }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Posisi Kas Bersih (Net Cash)</div>
+      <div class="stat-value" style="color: var(--primary);">{{ bendahara_metrics.net_cash }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="border-left: 4px solid var(--success);">
+    <div class="card-title">
+      <span>💳 Antrean Pencairan Pinjaman (Disbursement Queue)</span>
+      <a href="/disbursement" class="btn btn-success btn-sm">Buka Halaman Pencairan</a>
+    </div>
+    {% if bendahara_metrics.waiting_disbursements %}
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>No. Pengajuan</th>
+            <th>Nama Anggota</th>
+            <th>Rekening Tujuan</th>
+            <th>Nominal Cair</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w in bendahara_metrics.waiting_disbursements %}
+          <tr>
+            <td><code>{{ w.application_number }}</code></td>
+            <td><strong>{{ w.member_name }}</strong></td>
+            <td>{{ w.bank_account or 'Kas Koperasi' }}</td>
+            <td style="font-weight: 700; color: var(--primary);">Rp {{ w.amount }}</td>
+            <td>
+              <a href="/disbursement" class="btn btn-success btn-sm">Cairkan Sekarang</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted">Tidak ada pinjaman yang menunggu pencairan dana.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- 5. ADMIN KOPERASI VIEW -->
+{% if admin_metrics and ('ADMIN_KOPERASI' in current_user.roles or 'SUPER_ADMIN' in current_user.roles) %}
+<div style="margin-bottom: 32px;">
+  <h2>Operasional Admin Koperasi</h2>
+  <div class="grid grid-cols-4">
+    <div class="stat-card">
+      <div class="stat-title">Total Anggota</div>
+      <div class="stat-value">{{ admin_metrics.total_members }}</div>
+      <div class="stat-sub"><a href="/members" style="color: var(--primary);">Kelola Anggota →</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Batch Import Selesai</div>
+      <div class="stat-value">{{ admin_metrics.import_batches_count }}</div>
+      <div class="stat-sub"><a href="/import" style="color: var(--primary);">Import Anggota Baru →</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Pengajuan Berjalan</div>
+      <div class="stat-value">{{ admin_metrics.in_flight_applications }}</div>
+      <div class="stat-sub"><a href="/loans" style="color: var(--primary);">Lihat Pengajuan →</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Aksi Cepat Admin</div>
+      <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+        <a href="/import" class="btn btn-primary btn-sm">📥 Bulk Import Anggota</a>
+        <a href="/members/new" class="btn btn-secondary btn-sm">➕ Tambah Manual</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- 6. SUPER ADMIN VIEW -->
+{% if superadmin_metrics and 'SUPER_ADMIN' in current_user.roles %}
+<div>
+  <h2>Audit & Keamanan Sistem (Super Admin)</h2>
+  <div class="grid grid-cols-3" style="margin-bottom: 20px;">
+    <div class="stat-card">
+      <div class="stat-title">Total Pengguna Terdaftar</div>
+      <div class="stat-value">{{ superadmin_metrics.total_users }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Pengguna Aktif</div>
+      <div class="stat-value" style="color: var(--success);">{{ superadmin_metrics.active_users }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Total Log Audit Tercatat</div>
+      <div class="stat-value" style="color: var(--primary);">{{ superadmin_metrics.audit_events_count }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span>🛡️ Aktivitas Audit Terbaru</span>
+      <a href="/reports" class="btn btn-secondary btn-sm">Semua Log Audit</a>
+    </div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Waktu</th>
+            <th>Aktor</th>
+            <th>Role</th>
+            <th>Aksi</th>
+            <th>Entitas</th>
+            <th>Hasil</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in superadmin_metrics.recent_audits %}
+          <tr>
+            <td style="font-size: 0.8rem; color: var(--gray-600);">{{ a.timestamp }}</td>
+            <td><strong>{{ a.actor_name or 'SYSTEM' }}</strong></td>
+            <td><code>{{ a.actor_role or '-' }}</code></td>
+            <td><code>{{ a.action }}</code></td>
+            <td>{{ a.entity }} (ID: {{ a.entity_id or '-' }})</td>
+            <td>
+              <span class="badge badge-{{ 'success' if a.result == 'SUCCESS' else 'danger' }}">{{ a.result }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

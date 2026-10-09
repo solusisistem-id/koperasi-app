@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Koperasi Core{% endblock %} - Aplikasi Koperasi End-to-End</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    {% block extra_css %}{% endblock %}
+  </style>
+</head>
+<body>
+  {% if current_user %}
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span>🏛️ Koperasi Core</span>
+        <span class="badge">V2.1</span>
+      </div>
+      <ul class="sidebar-menu">
+        <li><a href="/dashboard" class="{% if active_tab == 'dashboard' %}active{% endif %}">📊 Dashboard</a></li>
+        
+        {% if 'ADMIN_KOPERASI' in current_user.roles or 'SUPER_ADMIN' in current_user.roles %}
+        <li><a href="/members" class="{% if active_tab == 'members' %}active{% endif %}">👥 Data Anggota</a></li>
+        <li><a href="/import" class="{% if active_tab == 'import' %}active{% endif %}">📥 Bulk Import Anggota</a></li>
+        {% endif %}
+
+        <li><a href="/savings" class="{% if active_tab == 'savings' %}active{% endif %}">💰 Simpanan & Ledger</a></li>
+        <li><a href="/loans" class="{% if active_tab == 'loans' %}active{% endif %}">📑 Pinjaman</a></li>
+
+        <li><a href="/business-units" class="{% if active_tab == 'business_units' %}active{% endif %}">🏪 Unit Toko & Fotocopy</a></li>
+
+        {% if 'BENDAHARA' in current_user.roles or 'SUPER_ADMIN' in current_user.roles %}
+        <li><a href="/disbursement" class="{% if active_tab == 'disbursement' %}active{% endif %}">💳 Pencairan (Bendahara)</a></li>
+        {% endif %}
+
+        <li><a href="/reports" class="{% if active_tab == 'reports' %}active{% endif %}">📈 Laporan & Audit</a></li>
+
+        {% if 'ADMIN_KOPERASI' in current_user.roles or 'SUPER_ADMIN' in current_user.roles %}
+        <li><a href="/settings" class="{% if active_tab == 'settings' %}active{% endif %}">⚙️ Pengaturan</a></li>
+        {% endif %}
+
+        {% if 'SUPER_ADMIN' in current_user.roles %}
+        <li><a href="/users" class="{% if active_tab == 'users' %}active{% endif %}">👥 Kelola Pengguna</a></li>
+        {% endif %}
+      </ul>
+      <div class="sidebar-footer">
+        <div style="font-weight: 600; color: #fff;">{{ current_user.full_name }}</div>
+        <div style="color: #94a3b8; font-size: 0.75rem; margin-top: 2px;">
+          {{ current_user.roles | join(', ') }}
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <header class="topbar">
+        <div>
+          <span style="font-weight: 600; color: var(--gray-700);">Sistem Koperasi Pegawai</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <span style="font-size: 0.85rem; color: var(--gray-600);">Login sebagai: <strong>{{ current_user.email }}</strong></span>
+          <a href="/logout" class="btn btn-secondary btn-sm">Keluar</a>
+        </div>
+      </header>
+
+      <main class="page-body">
+        {% if message %}
+        <div class="alert alert-info">{{ message }}</div>
+        {% endif %}
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+        <div class="alert alert-success">{{ success }}</div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  {% else %}
+  <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px;">
+    {% block guest_content %}{% endblock %}
+  </div>
+  {% endif %}
+
+  <!-- Automatic CSRF Token Injection for all POST forms -->
+  <script>
+  (function() {
+    function getCookie(name) {
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+      if (match) return decodeURIComponent(match[2]);
+      return '';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      const csrfToken = "{{ csrf_token }}" || getCookie("koperasi_csrf");
+      if (csrfToken) {
+        document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function(form) {
+          if (!form.querySelector('input[name="csrf_token"]')) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'csrf_token';
+            input.value = csrfToken;
+            form.appendChild(input);
+          }
+        });
+      }
+    });
+  })();
+  </script>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

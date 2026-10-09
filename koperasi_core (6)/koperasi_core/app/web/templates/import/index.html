@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk Import Anggota - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>📥 Bulk Import Anggota V2</h1>
+    <p class="text-muted">Proses terkontrol: Download Template → Unggah → Validasi → Preview → Konfirmasi Commit</p>
+  </div>
+  <div style="display: flex; gap: 10px;">
+    <a href="/import/template?format=xlsx" class="btn btn-secondary btn-sm">📄 Download Template Excel (.xlsx)</a>
+    <a href="/import/template?format=csv" class="btn btn-secondary btn-sm">📄 Download Template CSV (.csv)</a>
+  </div>
+</div>
+
+{% if preview %}
+<!-- PREVIEW STEP -->
+<div class="card" style="border: 2px solid {% if preview.summary.invalid_rows > 0 %}var(--danger){% else %}var(--success){% endif %};">
+  <div class="card-title">
+    <span>🔍 Hasil Validasi & Preview Batch: <code>{{ preview.batch_number }}</code></span>
+    <div>
+      {% if preview.dry_run %}
+      <span class="badge badge-warning" style="margin-right: 8px;">MODE DRY-RUN (HANYA VALIDASI)</span>
+      {% endif %}
+      <span class="badge badge-secondary">Mode: {{ preview.mode }}</span>
+    </div>
+  </div>
+
+  <!-- Summary Counters -->
+  <div class="grid grid-cols-4" style="margin-bottom: 20px;">
+    <div class="stat-card" style="background-color: var(--gray-50);">
+      <div class="stat-title">Total Baris File</div>
+      <div class="stat-value">{{ preview.summary.total_rows }}</div>
+      <div class="stat-sub">File: {{ preview.filename }}</div>
+    </div>
+    <div class="stat-card" style="background-color: var(--success-light);">
+      <div class="stat-title">Baris Valid</div>
+      <div class="stat-value" style="color: var(--success);">{{ preview.summary.valid_rows }}</div>
+      <div class="stat-sub">Baru: {{ preview.summary.new_rows }} | Update: {{ preview.summary.update_rows }}</div>
+    </div>
+    <div class="stat-card" style="background-color: {% if preview.summary.invalid_rows > 0 %}var(--danger-light){% else %}var(--gray-50){% endif %};">
+      <div class="stat-title">Baris Error (Invalid)</div>
+      <div class="stat-value" style="color: {% if preview.summary.invalid_rows > 0 %}var(--danger){% else %}var(--gray-700){% endif %};">
+        {{ preview.summary.invalid_rows }}
+      </div>
+      <div class="stat-sub">Duplikat: {{ preview.summary.duplicate_rows }}</div>
+    </div>
+    <div class="stat-card" style="background-color: {% if preview.summary.warning_rows > 0 %}var(--warning-light){% else %}var(--gray-50){% endif %};">
+      <div class="stat-title">Peringatan (Warnings)</div>
+      <div class="stat-value" style="color: var(--warning);">{{ preview.summary.warning_rows }}</div>
+      <div class="stat-sub">Data dapat diproses dengan penyesuaian</div>
+    </div>
+  </div>
+
+  <!-- Error Alert & Download Error Report -->
+  {% if preview.summary.invalid_rows > 0 %}
+  <div class="alert alert-danger" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <strong>Perhatian:</strong> Ditemukan {{ preview.summary.invalid_rows }} baris dengan kesalahan blocking.
+      Secara default, batch tidak dapat di-commit sebelum data diperbaiki.
+    </div>
+    <a href="/import/batch/{{ preview.batch_id }}/errors" class="btn btn-danger btn-sm" download>
+      ⬇️ Download Error Report (CSV)
+    </a>
+  </div>
+  {% else %}
+  <div class="alert alert-success">
+    ✅ Seluruh {{ preview.summary.valid_rows }} baris data telah divalidasi dan siap untuk di-commit ke database.
+  </div>
+  {% endif %}
+
+  <!-- Errors List Table -->
+  {% if preview.all_errors %}
+  <div style="margin-bottom: 24px;">
+    <h3 style="font-size: 1rem; color: var(--danger); margin-bottom: 8px;">Daftar Error Per Baris:</h3>
+    <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 100px;">Baris Excel</th>
+            <th style="width: 150px;">Kolom / Field</th>
+            <th>Penyebab Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for err in preview.all_errors %}
+          <tr>
+            <td><strong>Baris #{{ err.row }}</strong></td>
+            <td><code>{{ err.field }}</code></td>
+            <td style="color: var(--danger);">{{ err.reason }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Preview Staged Data -->
+  <div style="margin-bottom: 24px;">
+    <h3 style="font-size: 1rem; margin-bottom: 8px;">Pratinjau Data (Sampel 50 Baris Pertama):</h3>
+    <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Baris</th>
+            <th>Status</th>
+            <th>Aksi</th>
+            <th>No. Anggota</th>
+            <th>Nama Lengkap</th>
+            <th>NIK</th>
+            <th>Email</th>
+            <th>Dept / Posisi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in preview.preview_rows %}
+          <tr>
+            <td>#{{ r.row_number }}</td>
+            <td>
+              <span class="badge badge-{{ 'success' if r.status == 'VALID' else ('danger' if r.status == 'INVALID' else 'warning') }}">
+                {{ r.status }}
+              </span>
+            </td>
+            <td><code>{{ r.action_type }}</code></td>
+            <td><strong>{{ r.data.member_number }}</strong></td>
+            <td>{{ r.data.name }}</td>
+            <td>{{ r.data.nik }}</td>
+            <td>{{ r.data.email }}</td>
+            <td>{{ r.data.department }} - {{ r.data.position }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--gray-200); padding-top: 16px;">
+    <a href="/import" class="btn btn-secondary">Batal / Unggah Ulang</a>
+    {% if preview.can_commit and not preview.dry_run %}
+    <form method="POST" action="/import/commit/{{ preview.batch_id }}">
+      <button type="submit" class="btn btn-success" onclick="return confirm('Konfirmasi commit data ke database produksi?')">
+        🚀 Konfirmasi & Commit ke Database
+      </button>
+    </form>
+    {% elif preview.dry_run %}
+    <button class="btn btn-secondary" disabled>Dry Run Selesai (Tidak Disimpan ke DB)</button>
+    {% else %}
+    <button class="btn btn-danger" disabled title="Perbaiki error terlebih dahulu">
+      🚫 Commit Diblokir (Terdapat Error)
+    </button>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- UPLOAD FORM -->
+<div class="grid grid-cols-3">
+  <div class="card" style="grid-column: span 2;">
+    <div class="card-title">Unggah File Anggota Baru atau Migrasi Data</div>
+
+    <form method="POST" action="/import/upload" enctype="multipart/form-data">
+      <div class="form-group">
+        <label class="form-label" for="file">Pilih File Spreadsheet (Excel .xlsx atau CSV .csv)</label>
+        <input type="file" id="file" name="file" class="form-control" accept=".xlsx,.xls,.csv" required>
+        <p class="form-helper">Pastikan header kolom sesuai dengan template standar.</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Mode Import</label>
+        <div style="display: flex; gap: 20px; margin-top: 6px;">
+          <label style="font-size: 0.9rem; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="mode" value="ADD_ONLY" checked>
+            <span><strong>ADD_ONLY</strong> (Hanya tambah anggota baru, tolak jika nomor/NIK sudah ada)</span>
+          </label>
+        </div>
+        <div style="display: flex; gap: 20px; margin-top: 6px;">
+          <label style="font-size: 0.9rem; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="mode" value="UPSERT">
+            <span><strong>UPSERT</strong> (Tambah baru jika belum ada, perbarui data jika nomor sudah ada)</span>
+          </label>
+        </div>
+        <div style="display: flex; gap: 20px; margin-top: 6px;">
+          <label style="font-size: 0.9rem; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="mode" value="UPDATE_EXISTING">
+            <span><strong>UPDATE_EXISTING</strong> (Hanya perbarui anggota yang sudah ada di database)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label style="font-size: 0.9rem; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <input type="checkbox" name="dry_run" value="true">
+          <span><strong>Dry Run (Validasi Saja)</strong> — uji coba validasi tanpa menyimpan ke database produksi.</span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="margin-top: 10px;">
+        📤 Unggah & Validasi File
+      </button>
+    </form>
+  </div>
+
+  <!-- Guidelines Card -->
+  <div class="card" style="background-color: var(--gray-50);">
+    <div class="card-title">📖 Aturan & Format Data</div>
+    <ul style="font-size: 0.85rem; color: var(--gray-700); line-height: 1.7; margin-left: 18px;">
+      <li><strong>member_number:</strong> Nomor unik anggota koperasi (Business Key).</li>
+      <li><strong>nik:</strong> 16 digit angka KTP. Tidak boleh ganda.</li>
+      <li><strong>email:</strong> Alamat email unik dan valid.</li>
+      <li><strong>employee_id:</strong> Nomor pegawai (opsional, jika karyawan).</li>
+      <li><strong>membership_date:</strong> Format YYYY-MM-DD atau DD/MM/YYYY.</li>
+      <li><strong>Saldo Awal:</strong> Dikelola terpisah melalui ledger saldo awal untuk integritas audit finansial.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- IMPORT HISTORY TABLE -->
+<div class="card">
+  <div class="card-title">
+    <span>📜 Riwayat Batch Import (Import History)</span>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Batch ID</th>
+          <th>Nama File</th>
+          <th>Mode</th>
+          <th>Total</th>
+          <th>Berhasil (Dibuat / Diupdate)</th>
+          <th>Gagal</th>
+          <th>Peringatan</th>
+          <th>Diupload Oleh</th>
+          <th>Waktu Selesai</th>
+          <th>Status</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in history %}
+        <tr>
+          <td><code>{{ b.batch_number }}</code></td>
+          <td><strong>{{ b.file_name }}</strong></td>
+          <td><span class="badge badge-secondary">{{ b.mode }}</span></td>
+          <td>{{ b.total_rows }}</td>
+          <td>
+            <span style="color: var(--success); font-weight: 600;">+{{ b.created_rows }}</span> /
+            <span style="color: var(--primary); font-weight: 600;">~{{ b.updated_rows }}</span>
+          </td>
+          <td style="color: {% if b.failed_rows > 0 %}var(--danger){% else %}inherit{% endif %}; font-weight: 600;">
+            {{ b.failed_rows }}
+          </td>
+          <td>{{ b.warning_count }}</td>
+          <td>{{ b.imported_by_name or 'Admin' }}</td>
+          <td style="font-size: 0.8rem; color: var(--gray-600);">{{ b.completed_at or b.started_at }}</td>
+          <td>
+            <span class="badge badge-{{ 'success' if b.status == 'COMMITTED' else ('danger' if b.status == 'FAILED' else 'warning') }}">
+              {{ b.status }}
+            </span>
+          </td>
+          <td>
+            {% if b.invalid_rows > 0 %}
+            <a href="/import/batch/{{ b.id }}/errors" class="btn btn-secondary btn-sm" download>Error CSV</a>
+            {% else %}
+            <span style="font-size: 0.8rem; color: var(--gray-600);">-</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Kelola Pengguna Sistem - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>⚙️ Manajemen Pengguna & Hak Akses (RBAC)</h1>
+    <p class="text-muted">Khusus Super Admin: Mengelola akun pengguna, status lifecycle, dan peran (roles).</p>
+  </div>
+</div>
+
+<div class="grid grid-cols-3">
+  <!-- Users List -->
+  <div class="card" style="grid-column: span 2;">
+    <div class="card-title">Daftar Pengguna Sistem</div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Nama Lengkap</th>
+            <th>Email</th>
+            <th>Peran (Roles)</th>
+            <th>Status Lifecycle</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td><strong>{{ u.full_name }}</strong></td>
+            <td>{{ u.email }}</td>
+            <td>
+              {% for r in u.roles %}
+              <span class="badge badge-secondary">{{ r }}</span>
+              {% endfor %}
+            </td>
+            <td>
+              <span class="badge badge-{{ 'active' if u.status == 'ACTIVE' else ('danger' if u.status in ('SUSPENDED', 'DEACTIVATED') else 'pending') }}">
+                {{ u.status }}
+              </span>
+            </td>
+            <td>
+              {% if u.id != current_user.id %}
+              <form method="POST" action="/users/{{ u.id }}/status" style="display: inline;">
+                {% if u.status == 'ACTIVE' %}
+                <button type="submit" name="status" value="SUSPENDED" class="btn btn-danger btn-sm" onclick="return confirm('Tangguhkan (suspend) akun {{ u.email }}?')">
+                  Suspend
+                </button>
+                {% else %}
+                <button type="submit" name="status" value="ACTIVE" class="btn btn-success btn-sm" onclick="return confirm('Aktifkan kembali akun {{ u.email }}?')">
+                  Aktifkan
+                </button>
+                {% endif %}
+              </form>
+              {% else %}
+              <span style="font-size: 0.75rem; color: var(--gray-600);">(Akun Anda)</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Invite New User Form -->
+  <div class="card">
+    <div class="card-title">📧 Undang Pengguna Baru</div>
+    <form method="POST" action="/users/invite">
+      <div class="form-group">
+        <label class="form-label" for="full_name">Nama Lengkap</label>
+        <input type="text" id="full_name" name="full_name" class="form-control" placeholder="Nama Pejabat/Staff" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="email">Alamat Email</label>
+        <input type="email" id="email" name="email" class="form-control" placeholder="email@koperasi.local" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Pilih Peran (Role)</label>
+        <div style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+          <label><input type="checkbox" name="roles" value="ADMIN_KOPERASI"> Admin Koperasi</label>
+          <label><input type="checkbox" name="roles" value="KETUA"> Ketua Koperasi</label>
+          <label><input type="checkbox" name="roles" value="BENDAHARA"> Bendahara</label>
+          <label><input type="checkbox" name="roles" value="ATASAN_APPROVER"> Atasan / Approver</label>
+          <label><input type="checkbox" name="roles" value="ANGGOTA" checked> Anggota</label>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+        Kirim Undangan Aktivasi
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

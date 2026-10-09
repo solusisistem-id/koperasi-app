@@ -1,0 +1,4 @@
+member_number,account_type,amount,effective_date,reference,notes
+MEM-001,POKOK,500000,2024-01-01,OB-MIG-001,Saldo Pokok Awal Migrasi
+MEM-001,WAJIB,200000,2024-01-01,OB-MIG-002,Saldo Wajib Awal Migrasi
+MEM-001,SUKARELA,1500000,2024-01-01,OB-MIG-003,Saldo Sukarela Awal Migrasi
