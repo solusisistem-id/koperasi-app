@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Input Laporan Keuangan Unit Usaha - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>➕ Input Laporan Neraca & Laba Rugi Unit Usaha</h1>
+    <p class="text-muted">Formulir sederhana untuk memasukkan rekap keuangan Toko atau Fotocopy per periode.</p>
+  </div>
+  <div>
+    <a href="/business-units" class="btn btn-secondary btn-sm">← Kembali ke Unit Usaha</a>
+  </div>
+</div>
+
+<form method="POST" action="/business-units/new-report">
+  <div class="grid grid-cols-3">
+    <!-- Kolom 1 & 2: Form Input -->
+    <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 20px;">
+      
+      <!-- Pilihan Unit & Periode -->
+      <div class="card">
+        <div class="card-title">1. Identitas Unit & Periode Laporan</div>
+        <div class="grid grid-cols-3">
+          <div class="form-group">
+            <label class="form-label" for="unit_id">Pilih Unit Usaha *</label>
+            <select id="unit_id" name="unit_id" class="form-control" required>
+              {% for u in units %}
+              <option value="{{ u.id }}" {% if selected_unit_id == u.id %}selected{% endif %}>
+                {{ u.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="period_month">Bulan *</label>
+            <select id="period_month" name="period_month" class="form-control" required>
+              <option value="1">Januari</option>
+              <option value="2">Februari</option>
+              <option value="3">Maret</option>
+              <option value="4">April</option>
+              <option value="5">Mei</option>
+              <option value="6">Juni</option>
+              <option value="7">Juli</option>
+              <option value="8">Agustus</option>
+              <option value="9">September</option>
+              <option value="10" selected>Oktober</option>
+              <option value="11">November</option>
+              <option value="12">Desember</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="period_year">Tahun Buku *</label>
+            <input type="number" id="period_year" name="period_year" class="form-control" value="2026" required>
+          </div>
+        </div>
+      </div>
+
+      <!-- Laba Rugi -->
+      <div class="card" style="border-left: 4px solid var(--success);">
+        <div class="card-title">2. Kinerja Laba / Rugi Periode Ini</div>
+        <div class="grid grid-cols-3">
+          <div class="form-group">
+            <label class="form-label" for="gross_revenue">Total Penjualan / Omzet (Rp) *</label>
+            <input type="number" id="gross_revenue" name="gross_revenue" class="form-control" placeholder="cth: 25000000" min="0" step="1000" required oninput="calculatePL()">
+            <p class="form-helper">Total uang masuk dari penjualan barang/jasa.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cogs">HPP / Biaya Kulakan Barang (Rp) *</label>
+            <input type="number" id="cogs" name="cogs" class="form-control" placeholder="cth: 18000000" min="0" step="1000" required oninput="calculatePL()">
+            <p class="form-helper">Harga modal barang terjual / beli kertas & tinta.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="operational_expenses">Biaya Operasional (Rp) *</label>
+            <input type="number" id="operational_expenses" name="operational_expenses" class="form-control" placeholder="cth: 3000000" min="0" step="1000" required oninput="calculatePL()">
+            <p class="form-helper">Gaji penjaga unit, listrik, servis mesin, plastik.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Neraca Ringkas -->
+      <div class="card" style="border-left: 4px solid var(--primary);">
+        <div class="card-title">3. Posisi Neraca Ringkas (Harta & Hutang Unit)</div>
+        <div class="grid grid-cols-2">
+          <div class="form-group">
+            <label class="form-label" for="cash_and_bank">Kas di Tangan Unit (Rp) *</label>
+            <input type="number" id="cash_and_bank" name="cash_and_bank" class="form-control" placeholder="cth: 2000000" min="0" step="1000" required oninput="calculateBalance()">
+            <p class="form-helper">Uang tunai kas kecil yang masih dipegang unit.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inventory_value">Nilai Stok / Persediaan Barang (Rp) *</label>
+            <input type="number" id="inventory_value" name="inventory_value" class="form-control" placeholder="cth: 15000000" min="0" step="1000" required oninput="calculateBalance()">
+            <p class="form-helper">Nilai barang dagangan di rak toko / stok kertas belum terpakai.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="receivables">Piutang Anggota / Bon (Rp)</label>
+            <input type="number" id="receivables" name="receivables" class="form-control" placeholder="cth: 1500000" min="0" step="1000" value="0" oninput="calculateBalance()">
+            <p class="form-helper">Tagihan belanja anggota yang belum dibayar.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="fixed_assets">Aset Tetap / Peralatan (Rp)</label>
+            <input type="number" id="fixed_assets" name="fixed_assets" class="form-control" placeholder="cth: 12000000" min="0" step="1000" value="0" oninput="calculateBalance()">
+            <p class="form-helper">Nilai mesin fotocopy, rak toko, timbangan, meja kasir.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="payables">Hutang ke Supplier (Rp)</label>
+            <input type="number" id="payables" name="payables" class="form-control" placeholder="cth: 3000000" min="0" step="1000" value="0">
+            <p class="form-helper">Tagihan barang konsinyasi / kulakan yang belum lunas.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="unit_capital">Modal Awal / Ekuitas Unit (Rp)</label>
+            <input type="number" id="unit_capital" name="unit_capital" class="form-control" placeholder="cth: 10000000" min="0" step="1000" value="0">
+            <p class="form-helper">Modal awal yang disuntikkan koperasi ke unit ini.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Setoran ke Induk -->
+      <div class="card" style="border-left: 4px solid var(--warning);">
+        <div class="card-title">4. Setoran Kas ke Kas Induk Koperasi</div>
+        <div class="grid grid-cols-2">
+          <div class="form-group">
+            <label class="form-label" for="cash_deposit_to_parent">Jumlah Kas yang Disetor ke Bendahara Induk (Rp)</label>
+            <input type="number" id="cash_deposit_to_parent" name="cash_deposit_to_parent" class="form-control" placeholder="cth: 3500000" min="0" step="1000" value="0">
+            <p class="form-helper">Uang fisik yang diserahkan unit ke rekening utama koperasi.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="deposit_date">Tanggal Setor Kas</label>
+            <input type="date" id="deposit_date" name="deposit_date" class="form-control" value="{{ today }}">
+          </div>
+
+          <div class="form-group" style="grid-column: span 2;">
+            <label class="form-label" for="notes">Catatan / Keterangan dari Pengurus Unit</label>
+            <input type="text" id="notes" name="notes" class="form-control" placeholder="cth: Laporan bulan Oktober selesai audit fisik stok (stock opname)">
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 12px;">
+        <a href="/business-units" class="btn btn-secondary">Batal</a>
+        <button type="submit" class="btn btn-primary">
+          💾 Simpan Laporan Keuangan Unit
+        </button>
+      </div>
+    </div>
+
+    <!-- Kolom 3: Live Preview Calculation Card -->
+    <div>
+      <div class="card" style="position: sticky; top: 20px; background-color: var(--gray-50); border: 2px solid var(--gray-300);">
+        <div class="card-title">📊 Rangkuman Otomatis</div>
+        
+        <div style="font-size: 0.85rem; line-height: 1.8;">
+          <div style="font-weight: 700; color: var(--gray-700); margin-bottom: 4px; border-bottom: 1px solid var(--gray-200);">Kinerja Laba / Rugi:</div>
+          <div style="display: flex; justify-content: space-between;">
+            <span class="text-muted">Omzet Kotor:</span>
+            <strong id="live_rev">Rp 0</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span class="text-muted">HPP / Kulakan:</span>
+            <span id="live_cogs" style="color: var(--danger);">- Rp 0</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span class="text-muted">Biaya Operasional:</span>
+            <span id="live_opex" style="color: var(--danger);">- Rp 0</span>
+          </div>
+          <div style="background-color: white; border: 1px solid var(--gray-300); border-radius: var(--radius-md); padding: 10px; margin: 10px 0; text-align: center;">
+            <div style="font-size: 0.75rem; color: var(--gray-600); text-transform: uppercase;">Estimasi Laba Bersih Unit</div>
+            <div id="live_net_profit" style="font-size: 1.4rem; font-weight: 800; color: var(--success); margin-top: 2px;">Rp 0</div>
+          </div>
+
+          <div style="font-weight: 700; color: var(--gray-700); margin-top: 16px; margin-bottom: 4px; border-bottom: 1px solid var(--gray-200);">Posisi Harta (Aset):</div>
+          <div style="display: flex; justify-content: space-between;">
+            <span class="text-muted">Kas di Tangan:</span>
+            <span id="live_cash">Rp 0</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span class="text-muted">Stok Barang:</span>
+            <span id="live_inv">Rp 0</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span class="text-muted">Piutang Anggota:</span>
+            <span id="live_rec">Rp 0</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span class="text-muted">Aset Peralatan:</span>
+            <span id="live_fix">Rp 0</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--gray-300); padding-top: 6px; margin-top: 6px;">
+            <strong style="color: var(--gray-800);">Total Aset Unit:</strong>
+            <strong id="live_tot_assets" style="color: var(--primary);">Rp 0</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function formatRupiah(num) {
+  return "Rp " + Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function calculatePL() {
+  const rev = parseFloat(document.getElementById('gross_revenue').value) || 0;
+  const cogs = parseFloat(document.getElementById('cogs').value) || 0;
+  const opex = parseFloat(document.getElementById('operational_expenses').value) || 0;
+  const profit = rev - cogs - opex;
+
+  document.getElementById('live_rev').innerText = formatRupiah(rev);
+  document.getElementById('live_cogs').innerText = "- " + formatRupiah(cogs);
+  document.getElementById('live_opex').innerText = "- " + formatRupiah(opex);
+  
+  const profitEl = document.getElementById('live_net_profit');
+  profitEl.innerText = formatRupiah(profit);
+  profitEl.style.color = profit >= 0 ? "var(--success)" : "var(--danger)";
+}
+
+function calculateBalance() {
+  const cash = parseFloat(document.getElementById('cash_and_bank').value) || 0;
+  const inv = parseFloat(document.getElementById('inventory_value').value) || 0;
+  const rec = parseFloat(document.getElementById('receivables').value) || 0;
+  const fix = parseFloat(document.getElementById('fixed_assets').value) || 0;
+  const total = cash + inv + rec + fix;
+
+  document.getElementById('live_cash').innerText = formatRupiah(cash);
+  document.getElementById('live_inv').innerText = formatRupiah(inv);
+  document.getElementById('live_rec').innerText = formatRupiah(rec);
+  document.getElementById('live_fix').innerText = formatRupiah(fix);
+  document.getElementById('live_tot_assets').innerText = formatRupiah(total);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  calculatePL();
+  calculateBalance();
+});
+</script>
+{% endblock %}

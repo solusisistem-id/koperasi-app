@@ -424,3 +424,85 @@ CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_qr_token_hash ON qr_verification_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_unit_reports ON unit_financial_reports(unit_id, period_year);
+
+
+-- Seed Core Roles
+INSERT INTO roles (code, name, description) VALUES
+    ('SUPER_ADMIN', 'Super Admin', 'Sistem & keamanan tertinggi'),
+    ('ADMIN_KOPERASI', 'Admin Koperasi', 'Operasional & keanggotaan'),
+    ('KETUA', 'Ketua Koperasi', 'Persetujuan kebijakan & pinjaman'),
+    ('BENDAHARA', 'Bendahara', 'Pencairan kas & keuangan'),
+    ('ATASAN_APPROVER', 'Atasan Approver', 'Persetujuan bawahan'),
+    ('ANGGOTA', 'Anggota', 'Layanan mandiri anggota')
+ON CONFLICT (code) DO NOTHING;
+
+-- Seed Core Permissions
+INSERT INTO permissions (code, name, module) VALUES
+    ('member.read_all', 'Lihat Semua Anggota', 'MEMBER'),
+    ('member.read_own', 'Lihat Data Sendiri', 'MEMBER'),
+    ('member.create', 'Daftar Anggota Baru', 'MEMBER'),
+    ('member.update', 'Ubah Data Anggota', 'MEMBER'),
+    ('member.import', 'Bulk Import Anggota', 'MEMBER'),
+    ('savings.read_all', 'Lihat Semua Simpanan', 'SAVINGS'),
+    ('savings.read_own', 'Lihat Simpanan Sendiri', 'SAVINGS'),
+    ('savings.create', 'Setoran Simpanan', 'SAVINGS'),
+    ('savings.opening_balance', 'Catat Saldo Awal', 'SAVINGS'),
+    ('loan.read_all', 'Lihat Semua Pinjaman', 'LOAN'),
+    ('loan.read_own', 'Lihat Pinjaman Sendiri', 'LOAN'),
+    ('loan.apply', 'Pengajuan Pinjaman', 'LOAN'),
+    ('loan.approve', 'Persetujuan Pinjaman', 'LOAN'),
+    ('loan.approve_manager', 'Persetujuan Atasan Langsung', 'LOAN'),
+    ('loan.approve_chairman', 'Persetujuan Ketua Koperasi', 'LOAN'),
+    ('loan.disburse', 'Pencairan Pinjaman', 'LOAN'),
+    ('installment.create', 'Pembayaran Angsuran', 'LOAN'),
+    ('document.read_all', 'Lihat Semua Dokumen', 'DOCUMENT'),
+    ('document.read_own', 'Lihat Dokumen Sendiri', 'DOCUMENT'),
+    ('document.verify', 'Verifikasi Dokumen', 'DOCUMENT'),
+    ('document.revoke', 'Cabut Dokumen', 'DOCUMENT'),
+    ('report.read', 'Lihat Laporan', 'REPORT'),
+    ('settings.manage', 'Kelola Pengaturan', 'SETTINGS'),
+    ('audit.read', 'Lihat Audit Trail', 'AUDIT'),
+    ('user.manage', 'Kelola Pengguna', 'USER')
+ON CONFLICT (code) DO NOTHING;
+
+-- Link Standard Permissions to Roles
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r, permissions p
+WHERE r.code = 'ADMIN_KOPERASI' AND p.code IN (
+    'member.read_all', 'member.create', 'member.update', 'member.import',
+    'savings.read_all', 'savings.create', 'savings.opening_balance',
+    'loan.read_all', 'loan.create', 'document.read_all', 'document.verify',
+    'document.revoke', 'report.read', 'settings.manage', 'audit.read', 'user.manage'
+)
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r, permissions p
+WHERE r.code = 'KETUA' AND p.code IN (
+    'member.read_all', 'savings.read_all', 'loan.read_all',
+    'loan.approve', 'loan.approve_chairman', 'report.read', 'audit.read'
+)
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r, permissions p
+WHERE r.code = 'BENDAHARA' AND p.code IN (
+    'member.read_all', 'savings.read_all', 'loan.read_all',
+    'loan.disburse', 'installment.create', 'savings.create', 'report.read'
+)
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r, permissions p
+WHERE r.code = 'ATASAN_APPROVER' AND p.code IN (
+    'loan.approve', 'loan.approve_manager'
+)
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r, permissions p
+WHERE r.code = 'ANGGOTA' AND p.code IN (
+    'member.read_own', 'savings.read_own', 'loan.read_own', 'loan.apply',
+    'document.read_own'
+)
+ON CONFLICT (role_id, permission_id) DO NOTHING;

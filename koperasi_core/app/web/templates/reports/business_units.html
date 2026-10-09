@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Unit Usaha (Toko & Fotocopy) - Koperasi Core{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1>🏪 Unit Usaha Toko & Fotocopy</h1>
+    <p class="text-muted">Konsolidasi laporan keuangan berkala dari pengurus unit independen untuk pelaporan global koperasi.</p>
+  </div>
+  <div style="display: flex; gap: 10px;">
+    <a href="/business-units/consolidation" class="btn btn-success btn-sm">📊 Laporan Konsolidasi & SHU (RAT)</a>
+    <a href="/business-units/new-report" class="btn btn-primary btn-sm">➕ Input Laporan Neraca & Laba Rugi</a>
+  </div>
+</div>
+
+<!-- Business Units Cards -->
+<div class="grid grid-cols-2" style="margin-bottom: 24px;">
+  {% for u in units %}
+  <div class="card" style="border-left: 4px solid {% if u.code == 'TOKO' %}var(--primary){% else %}var(--warning){% endif %};">
+    <div class="card-title">
+      <span>{% if u.code == 'TOKO' %}🛒{% else %}🖨️{% endif %} {{ u.name }}</span>
+      <span class="badge badge-success">AKTIF</span>
+    </div>
+    <p style="font-size: 0.9rem; color: var(--gray-700); margin-bottom: 12px;">{{ u.description }}</p>
+    <div style="font-size: 0.85rem; color: var(--gray-600); display: flex; justify-content: space-between; border-top: 1px solid var(--gray-200); padding-top: 10px;">
+      <span>Pengelola / Penanggung Jawab: <strong>{{ u.manager_name }}</strong></span>
+      <a href="/business-units/new-report?unit_id={{ u.id }}" style="color: var(--primary); text-decoration: none; font-weight: 600;">+ Input Rekap Periode Ini →</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Recent Reports Table -->
+<div class="card">
+  <div class="card-title">
+    <span>📜 Histori Rekap Laporan Keuangan Unit Usaha</span>
+    <span class="text-muted" style="font-size: 0.85rem;">Menampilkan omzet, laba bersih, aset, dan setoran kas ke kas induk koperasi.</span>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Unit Usaha</th>
+          <th>Periode</th>
+          <th>Total Omzet / Penjualan</th>
+          <th>Laba Bersih Unit</th>
+          <th>Posisi Total Aset</th>
+          <th>Setoran ke Kas Induk</th>
+          <th>Pelapor</th>
+          <th>Status</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rep in reports %}
+        <tr>
+          <td><strong>{{ rep.unit_name }}</strong></td>
+          <td>
+            <span class="badge badge-secondary">
+              {% if rep.period_month %}Bulan {{ rep.period_month }} / {% endif %}{{ rep.period_year }}
+            </span>
+          </td>
+          <td style="font-weight: 600;">{{ rep.formatted_revenue }}</td>
+          <td style="font-weight: 700; color: var(--success);">{{ rep.formatted_profit }}</td>
+          <td>{{ rep.formatted_assets }}</td>
+          <td style="font-weight: 600; color: var(--primary);">{{ rep.formatted_deposit }}</td>
+          <td style="font-size: 0.85rem;">{{ rep.reported_by_name or 'Pengurus' }}</td>
+          <td>
+            <span class="badge badge-{{ 'success' if rep.status == 'VERIFIED' else 'pending' }}">
+              {{ rep.status }}
+            </span>
+          </td>
+          <td>
+            {% if rep.status != 'VERIFIED' and ('BENDAHARA' in current_user.roles or 'ADMIN_KOPERASI' in current_user.roles or 'SUPER_ADMIN' in current_user.roles) %}
+            <form method="POST" action="/business-units/report/{{ rep.id }}/verify" style="display: inline;">
+              <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Verifikasi laporan ini? Jika ada setoran kas, otomatis akan dicatat sebagai kas masuk di buku besar induk.')">
+                Verifikasi
+              </button>
+            </form>
+            {% else %}
+            <span style="font-size: 0.8rem; color: var(--success);">✔ Terverifikasi</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" style="text-align: center; padding: 28px;" class="text-muted">
+            Belum ada laporan unit usaha yang dimasukkan. Silakan klik tombol "Input Laporan Neraca & Laba Rugi" di atas.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

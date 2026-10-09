@@ -107,7 +107,12 @@ def execute_insert(conn, query: str, params: tuple = ()) -> int:
 def get_connection(db_path: str = None):
     """Obtain raw database connection based on active engine."""
     if IS_POSTGRES and _psycopg2:
-        conn = _psycopg2.connect(DATABASE_URL)
+        conn_url = DATABASE_URL
+        # Ensure SSL is enforced for cloud PostgreSQL providers (Supabase, Render, Neon, etc.)
+        if ("supabase" in conn_url or "render" in conn_url or APP_ENV == "production") and "sslmode=" not in conn_url:
+            sep = "&" if "?" in conn_url else "?"
+            conn_url = f"{conn_url}{sep}sslmode=require"
+        conn = _psycopg2.connect(conn_url)
         return PostgresConnectionWrapper(conn)
     else:
         target_path = db_path or DB_PATH
