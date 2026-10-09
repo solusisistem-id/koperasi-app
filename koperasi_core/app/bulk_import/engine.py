@@ -6,11 +6,11 @@ import os
 import csv
 import io
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple, Optional
 import openpyxl
 
-from app.database import get_db
+from app.database import get_db, execute_insert
 from app.config import DATA_DIR, UPLOADS_DIR, TEMPLATES_DIR, ROLE_SUPER_ADMIN, ROLE_ADMIN_KOPERASI
 from app.security import log_audit, sanitize_for_spreadsheet
 from app.bulk_import.validator import (
@@ -184,10 +184,11 @@ def stage_and_preview_import(
         pos_map = {r["code"].upper(): r["id"] for r in pos_rows}
         pos_map.update({r["title"].upper(): r["id"] for r in pos_rows})
 
-        batch_number = f"IMP-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{secrets_hex(3)}"
+        batch_number = f"IMP-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{secrets_hex(3)}"
         file_ext = filename.split(".")[-1].upper()
 
-        cur_batch = conn.execute(
+        batch_id = execute_insert(
+            conn,
             """
             INSERT INTO import_batches (
                 batch_number, file_name, file_type, import_type, mode,
@@ -196,7 +197,6 @@ def stage_and_preview_import(
             """,
             (batch_number, filename, file_ext, mode, current_user["id"]),
         )
-        batch_id = cur_batch.lastrowid
 
         file_seen_numbers = set()
         file_seen_niks = set()
@@ -382,8 +382,7 @@ def commit_import_batch(batch_id: int, current_user: Dict[str, Any], ignore_warn
                     if dept_code.upper() in dept_map:
                         dept_id = dept_map[dept_code.upper()]
                     else:
-                        cur_d = conn.execute("INSERT INTO departments (code, name) VALUES (?, ?)", (dept_code.upper(), dept_code))
-                        dept_id = cur_d.lastrowid
+                        dept_id = execute_insert(conn, "INSERT INTO departments (code, name) VALUES (?, ?)", (dept_code.upper(), dept_code))
                         dept_map[dept_code.upper()] = dept_id
 
                 pos_title = norm.get("position", "")
@@ -392,11 +391,11 @@ def commit_import_batch(batch_id: int, current_user: Dict[str, Any], ignore_warn
                     if pos_title.upper() in pos_map:
                         pos_id = pos_map[pos_title.upper()]
                     else:
-                        cur_p = conn.execute(
+                        pos_id = execute_insert(
+                            conn,
                             "INSERT INTO positions (department_id, code, title) VALUES (?, ?, ?)",
                             (dept_id or 1, pos_title[:10].upper(), pos_title),
                         )
-                        pos_id = cur_p.lastrowid
                         pos_map[pos_title.upper()] = pos_id
 
                 emp_id = None
@@ -415,7 +414,8 @@ def commit_import_batch(batch_id: int, current_user: Dict[str, Any], ignore_warn
                             (norm["name"], norm["nik"], norm["email"], norm.get("phone", ""), dept_id, pos_id, emp_id),
                         )
                     else:
-                        cur_emp = conn.execute(
+                        emp_id = execute_insert(
+                            conn,
                             """
                             INSERT INTO employees (
                                 employee_id, name, nik, email, phone, department_id, position_id, status, created_at, updated_at
@@ -423,10 +423,10 @@ def commit_import_batch(batch_id: int, current_user: Dict[str, Any], ignore_warn
                             """,
                             (emp_code, norm["name"], norm["nik"], norm["email"], norm.get("phone", ""), dept_id, pos_id),
                         )
-                        emp_id = cur_emp.lastrowid
 
                 if action == "NEW":
-                    cur_m = conn.execute(
+                    member_id = execute_insert(
+                        conn,
                         """
                         INSERT INTO members (
                             member_number, employee_id, name, nik, email, phone, address,
@@ -446,12 +446,11 @@ def commit_import_batch(batch_id: int, current_user: Dict[str, Any], ignore_warn
                             norm.get("membership_status", "ACTIVE"),
                         ),
                     )
-                    member_id = cur_m.lastrowid
 
                     for acc_type in ["POKOK", "WAJIB", "SUKARELA"]:
                         acc_num = f"SA-{acc_type[:3]}-{norm['member_number']}"
                         conn.execute(
-                            "INSERT OR IGNORE INTO savings_accounts (member_id, account_number, account_type, status) VALUES (?, ?, ?, 'ACTIVE')",
+                            "INSERT INTO savings_accounts (member_id, account_number, account_type, status) VALUES (?, ?, ?, 'ACTIVE') ON CONFLICT (account_number) DO NOTHING",
                             (member_id, acc_num, acc_type),
                         )
 

@@ -1,13 +1,13 @@
 """
 Member Service for Koperasi Core.
 Enforces object-level authorization, member-employee-user separation,
-and audit logging.
+PostgreSQL compatibility (execute_insert, ON CONFLICT), and audit logging.
 """
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
-from app.database import get_db
-from app.security import log_audit, generate_secure_token, hash_password
+from app.database import get_db, execute_insert
+from app.security import log_audit, generate_secure_token, hash_password, hash_token
 from app.config import (
     ROLE_SUPER_ADMIN,
     ROLE_ADMIN_KOPERASI,
@@ -26,7 +26,6 @@ def can_access_member_data(current_user: Dict[str, Any], target_member_id: int) 
     privileged_roles = {ROLE_SUPER_ADMIN, ROLE_ADMIN_KOPERASI, ROLE_KETUA, ROLE_BENDAHARA}
     if any(r in privileged_roles for r in roles):
         return True
-    # If member, only allowed if current_user's member_id matches target_member_id
     return current_user.get("member_id") == target_member_id
 
 def get_member_by_id(member_id: int, current_user: Dict[str, Any]) -> Dict[str, Any]:
@@ -138,7 +137,7 @@ def create_member_manual(data: Dict[str, Any], current_user: Dict[str, Any]) -> 
     phone = data.get("phone", "").strip()
     address = data.get("address", "").strip()
     bank_account = data.get("bank_account", "").strip()
-    membership_date = data.get("membership_date", datetime.utcnow().strftime("%Y-%m-%d"))
+    membership_date = data.get("membership_date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     membership_status = data.get("membership_status", "ACTIVE")
 
     with get_db() as conn:
@@ -148,7 +147,8 @@ def create_member_manual(data: Dict[str, Any], current_user: Dict[str, Any]) -> 
         if conn.execute("SELECT id FROM members WHERE nik = ?", (nik,)).fetchone():
             raise ValueError(f"NIK {nik} sudah terdaftar pada anggota lain.")
 
-        cur = conn.execute(
+        member_id = execute_insert(
+            conn,
             """
             INSERT INTO members (
                 member_number, name, nik, email, phone, address, bank_account,
@@ -157,13 +157,12 @@ def create_member_manual(data: Dict[str, Any], current_user: Dict[str, Any]) -> 
             """,
             (member_number, name, nik, email, phone, address, bank_account, membership_date, membership_status),
         )
-        member_id = cur.lastrowid
 
         # Automatically create the 3 savings accounts
         for acc_type in ["POKOK", "WAJIB", "SUKARELA"]:
             acc_num = f"SA-{acc_type[:3]}-{member_number}"
             conn.execute(
-                "INSERT INTO savings_accounts (member_id, account_number, account_type, status) VALUES (?, ?, ?, 'ACTIVE')",
+                "INSERT INTO savings_accounts (member_id, account_number, account_type, status) VALUES (?, ?, ?, 'ACTIVE') ON CONFLICT (account_number) DO NOTHING",
                 (member_id, acc_num, acc_type),
             )
 
@@ -203,20 +202,22 @@ def create_user_for_member(member_id: int, current_user: Dict[str, Any]) -> Dict
         # Check if email is already taken
         user = conn.execute("SELECT id, status FROM users WHERE email = ?", (member["email"],)).fetchone()
         if not user:
-            from app.security import hash_password
             dummy_pwd = generate_secure_token(32)
-            cur = conn.execute(
+            user_id = execute_insert(
+                conn,
                 """
                 INSERT INTO users (email, password_hash, full_name, status, created_at, updated_at)
                 VALUES (?, ?, ?, 'INVITED', datetime('now'), datetime('now'))
                 """,
                 (member["email"], hash_password(dummy_pwd), member["name"]),
             )
-            user_id = cur.lastrowid
             # Assign ANGGOTA role
             role_anggota = conn.execute("SELECT id FROM roles WHERE code = ?", (ROLE_ANGGOTA,)).fetchone()
             if role_anggota:
-                conn.execute("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)", (user_id, role_anggota["id"]))
+                conn.execute(
+                    "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?) ON CONFLICT (user_id, role_id) DO NOTHING",
+                    (user_id, role_anggota["id"]),
+                )
         else:
             user_id = user["id"]
 
@@ -225,14 +226,14 @@ def create_user_for_member(member_id: int, current_user: Dict[str, Any]) -> Dict
 
         # Generate invitation token
         token = generate_secure_token(32)
-        from datetime import timedelta
-        expires_at = (datetime.utcnow() + timedelta(hours=TOKEN_EXPIRATION_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
+        token_digest = hash_token(token)
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRATION_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
         conn.execute(
             """
-            INSERT INTO invitation_tokens (user_id, email, token, expires_at, created_by, created_at)
+            INSERT INTO invitation_tokens (user_id, email, token_hash, expires_at, created_by, created_at)
             VALUES (?, ?, ?, ?, ?, datetime('now'))
             """,
-            (user_id, member["email"], token, expires_at, current_user["id"]),
+            (user_id, member["email"], token_digest, expires_at, current_user["id"]),
         )
 
         log_audit(
@@ -243,14 +244,13 @@ def create_user_for_member(member_id: int, current_user: Dict[str, Any]) -> Dict
             action="USER_INVITED",
             entity="users",
             entity_id=str(user_id),
-            after_state={"member_id": member_id, "email": member["email"], "token_created": True},
+            after_state={"member_id": member_id, "email": member["email"], "token_hash": token_digest},
             result="SUCCESS",
         )
 
         return {
-            "member_id": member_id,
             "user_id": user_id,
-            "email": member["email"],
             "invitation_token": token,
+            "token_hash": token_digest,
             "expires_at": expires_at,
         }

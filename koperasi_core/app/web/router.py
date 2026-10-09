@@ -1,9 +1,10 @@
+import json
 """
 Web Controller and Route Handlers for Koperasi Core.
 Connects FastAPI views, Jinja2 templates, and domain services.
 """
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import secrets
 
 from fastapi import APIRouter, Request, Response, Depends, Form, UploadFile, File, Query
@@ -11,6 +12,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response as RawRes
 from fastapi.templating import Jinja2Templates
 
 from app.config import (
+    APP_ENV,
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
     SESSION_COOKIE_NAME,
     ROLE_SUPER_ADMIN,
     ROLE_ADMIN_KOPERASI,
@@ -72,9 +76,33 @@ from app.reports.service import (
     get_audit_trail_report,
 )
 from app.database import get_db
+from app.reports.service import send_password_reset_email, send_invitation_email
 
 router = APIRouter()
-templates = Jinja2Templates(directory="koperasi_core/app/web/templates")
+import os
+import inspect
+
+TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+_orig_template_response = templates.TemplateResponse
+def _safe_template_response(*args, **kwargs):
+    if args and isinstance(args[0], str):
+        name = args[0]
+        ctx = args[1] if len(args) > 1 else kwargs.get("context", {})
+        req = ctx.get("request") if isinstance(ctx, dict) else kwargs.get("request")
+        if req:
+            csrf = getattr(req.state, 'csrf_token', None) or req.cookies.get(CSRF_COOKIE_NAME, '')
+            if 'csrf_token' not in ctx:
+                ctx['csrf_token'] = csrf
+        params = list(inspect.signature(_orig_template_response).parameters.values())
+        if params and params[0].name == "request":
+            return _orig_template_response(req, name, ctx, *args[2:], **kwargs)
+        else:
+            return _orig_template_response(name, ctx, *args[2:], **kwargs)
+    return _orig_template_response(*args, **kwargs)
+
+templates.TemplateResponse = _safe_template_response
 
 def get_current_user_optional(request: Request) -> Optional[dict]:
     token = request.cookies.get(SESSION_COOKIE_NAME)
@@ -123,7 +151,16 @@ def login_submit(
             value=session_data["session_token"],
             httponly=True,
             samesite="lax",
+            secure=(APP_ENV == "production"),
         )
+        if "csrf_token" in session_data:
+            redirect.set_cookie(
+                key=CSRF_COOKIE_NAME,
+                value=session_data["csrf_token"],
+                httponly=False,
+                samesite="lax",
+                secure=(APP_ENV == "production"),
+            )
         return redirect
     except AuthenticationError as e:
         return templates.TemplateResponse("auth/login.html", {
@@ -152,9 +189,12 @@ def forgot_password_submit(request: Request, email: str = Form(...)):
     # Notice: To not leak email existence to unauthorized callers, we show a general message.
     # For convenient local testing/demo, if token was generated, we provide the reset link in the message.
     if token:
-        msg = f"Tautan reset berhasil dibuat: /reset-password?token={token}"
+        reset_url = f"{request.base_url}reset-password?token={token}"
+        send_password_reset_email(email, reset_url)
+    if APP_ENV == "production":
+        msg = "Jika akun dengan email tersebut terdaftar dan aktif, instruksi reset password telah dikirim ke alamat email Anda."
     else:
-        msg = "Jika email terdaftar dan aktif, instruksi reset password telah diproses."
+        msg = f"Tautan reset berhasil dibuat: /reset-password?token={token}" if token else "Jika email terdaftar dan aktif, instruksi reset password telah diproses."
     return templates.TemplateResponse("auth/forgot_password.html", {
         "request": request, "current_user": None, "success": msg
     })
@@ -353,7 +393,7 @@ def import_index_view(
                         "row_number": r["row_number"],
                         "status": r["status"],
                         "action_type": r["action_type"],
-                        "data": eval(r["normalized_data_json"]) if r["normalized_data_json"] else {},
+                        "data": json.loads(r["normalized_data_json"]) if r["normalized_data_json"] else {},
                     }
                     for r in rows[:50]
                 ],
@@ -451,7 +491,7 @@ def savings_index_view(request: Request, success: Optional[str] = None, error: O
             member_id = m["id"] if m else 1
 
     savings = get_member_savings_summary(member_id, user)
-    new_idemp = f"IDEMP-DEP-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(4)}"
+    new_idemp = f"IDEMP-DEP-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(4)}"
 
     return templates.TemplateResponse("savings/index.html", {
         "request": request,
@@ -512,7 +552,7 @@ def savings_opening_balance_view(request: Request, member_id: Optional[int] = No
         "active_tab": "savings",
         "members": [dict(m) for m in members],
         "selected_member_id": member_id,
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
     })
 
 @router.post("/savings/opening-balance")
@@ -918,7 +958,7 @@ def business_units_new_report_view(request: Request, unit_id: Optional[int] = No
         "active_tab": "business_units",
         "units": units,
         "selected_unit_id": unit_id or (units[0]["id"] if units else 1),
-        "today": datetime.utcnow().strftime("%Y-%m-%d"),
+        "today": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "error": error,
     })
 

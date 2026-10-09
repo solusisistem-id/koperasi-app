@@ -1,19 +1,53 @@
-# Arsitektur & Spesifikasi Desain Koperasi Core V2
+# Arsitektur & Spesifikasi Desain Koperasi Core V3 (Production Ready)
 
-Dokumen ini menjelaskan arsitektur perangkat lunak, model domain, relasi basis data, pola keamanan, dan mesin alur kerja (*workflow engine*) aplikasi Koperasi Core.
+Dokumen ini menjelaskan arsitektur perangkat lunak, model domain, relasi basis data, pola keamanan, dan mesin alur kerja (*workflow engine*) aplikasi Koperasi Core versi produksi siap deploy ke **Render Web Service + Render Managed PostgreSQL**.
 
 ---
 
-## 1. Model Domain & Struktur Relasi Basis Data (27 Tabel)
-
-Aplikasi dibangun di atas basis data relasional SQLite dengan penegakan *foreign key constraints* (`PRAGMA foreign_keys = ON;`) dan tipe data uang *fixed-decimal numeric string*.
+## 1. Arsitektur Produksi & Target Deployment
 
 ```
-[users] ──┬── [user_roles] ── [roles]
+                    GITHUB REPOSITORY
+                           │
+                           ▼
+                  ┌─────────────────┐
+                  │ RENDER SERVICE  │
+                  │ FastAPI Backend │
+                  └────────┬────────┘
+                           │
+          ┌────────────────┼─────────────────┐
+          │                │                 │
+          ▼                ▼                 ▼
+   Render PostgreSQL  Object Storage   Email Provider
+   (Transactional DB) (S3/R2/Docs)     (SMTP/Gmail)
+          │
+          ▼
+   ┌──────┴──────────┬──────────────┐
+   │                 │              │
+Members           Savings         Loans
+   │                 │              │
+   └──────┬──────────┴──────────────┘
+          │
+    Multi-Approval
+          │
+      Audit Log
+```
+
+- **Target Deployment:** GitHub → Render Web Service → FastAPI → PostgreSQL → Object Storage.
+- **Transactional Source of Truth:** PostgreSQL (dengan presisi `NUMERIC(18,2)` untuk seluruh entitas finansial). SQLite didukung transparan hanya untuk local unit testing.
+- **Runtime Environment:** Render Web Service dengan binding dinamis `0.0.0.0:${PORT:-8000}`.
+- **Persistent Storage:** `StorageService` abstraction yang mendukung S3-compatible object storage (AWS S3, Cloudflare R2, MinIO, GCS) untuk berkas dokumen anggota dan bukti transaksi, menjaga integritas di atas filesystem Render yang bersifat ephemeral.
+
+---
+
+## 2. Model Domain & Struktur Relasi Basis Data (22 Tabel)
+
+```
+[users] ──┬── [user_roles] ── [roles] ── [role_permissions] ── [permissions]
           │
           ├── [user_sessions]
-          ├── [invitation_tokens]
-          ├── [password_reset_tokens]
+          ├── [invitation_tokens] (token_hash only)
+          ├── [password_reset_tokens] (token_hash only)
           │
           └── [members] ──┬── [savings_accounts] ──┬── [savings_transactions]
                           │                         └── [savings_opening_balances]
@@ -24,80 +58,36 @@ Aplikasi dibangun di atas basis data relasional SQLite dengan penegakan *foreign
                                                     │
                                                     └── [loans] ── [loan_installments]
                                                          │
-                                                         └── [documents] ── [qr_verification_tokens]
+                                                         └── [documents] ── [qr_verification_tokens] (token_hash only)
 
 [employees] (hierarchy via manager_id) ── [departments], [positions]
 [import_batches] ── [import_rows]
 [financial_transactions]
-[audit_logs]
+[audit_logs] (append-only)
 ```
 
-### Pemisahan Entitas Identitas
+### Pemisahan Entitas Identitas (Identity Segregation)
 - **Employee**: Mencerminkan karyawan perusahaan dengan struktur hirarki atasan bawahan (`manager_id` mengarah kembali ke `employees.id`).
 - **Member**: Mencerminkan anggota koperasi (memiliki nomor anggota unik `member_number` sebagai *business key*). Anggota dapat ditautkan ke profil karyawan (`employee_id`) atau pihak eksternal/khusus.
 - **User**: Akun otentikasi login (email, hash password, status akun). Import anggota **tidak** otomatis membuat akun login; akun dibuat terpisah melalui mekanisme undangan (*invitation token*).
-- **Role & Permission**: Hak akses multi-peran berbasis tabel penghubung `user_roles`. Satu akun dapat memegang beberapa peran (misal: Anggota sekaligus Atasan/Approver).
+- **Role & Permission Engine**: Otorisasi berbasis hak akses terpusat (`require_permission(user, permission_code)`). Role hanya menjadi grouping permission. Mendukung multi-peran dengan union permissions yang efektif.
 
 ---
 
-## 2. Mesin Bulk Import Anggota V2
+## 3. Integritas Finansial & Konkurensi Transaksi
 
-Alur kerja Bulk Import V2 dirancang untuk mencegah kerusakan data pada lingkungan produksi:
-
-1. **Unduh Template:** Format `.xlsx` (multi-sheet lengkap dengan petunjuk pengisian & *allowed values*) dan `.csv`.
-2. **Unggah & Staging:** File disimpan di tabel pementasan `import_batches` dan `import_rows`. Data mentah dan data ternormalisasi disimpan dalam bentuk JSON terstruktur.
-3. **Validasi Komprehensif:**
-   - Kelengkapan header wajib (`member_number`, `name`, `nik`, `email`).
-   - Format email (regex) dan validitas 16-digit angka NIK.
-   - Deteksi duplikasi intra-file (antar baris dalam satu file).
-   - Deteksi duplikasi basis data terhadap anggota yang sudah terdaftar.
-   - Pengecekan referensi departemen dan jabatan kerja.
-4. **Mode Pemasukan Data:**
-   - `ADD_ONLY`: Hanya menyisipkan anggota baru. Baris dengan nomor/NIK terdaftar ditandai sebagai duplikat dan diblokir.
-   - `UPDATE_EXISTING`: Hanya memperbarui data anggota yang telah terdaftar di sistem.
-   - `UPSERT`: Memperbarui jika sudah ada, atau menyisipkan baris baru jika belum ada.
-5. **Mode Dry-Run:** Melakukan pengujian integritas dan menghasilkan ringkasan pratinjau tanpa menyentuh tabel produksi.
-6. **Laporan Kesalahan:** Menyediakan unduhan berkas CSV berisikan nomor baris, kolom bermasalah, dan penyebab penolakan.
-7. **Komit Transaksional:** Menggunakan batasan transaksi database (*atomic transaction boundary*). Jika anggota berhasil dibuat, rekening Simpanan Pokok, Wajib, dan Sukarela otomatis diinisiasi.
+1. **Exact Decimal Math:** Seluruh nominal uang disimpan dalam tipe data `NUMERIC(18,2)` dan dikalkulasi menggunakan `Decimal` Python tanpa floating-point drift.
+2. **Row-Level Locking:** Operasi sensitif saldo simpanan, pencairan pinjaman, dan pembayaran angsuran menggunakan `SELECT ... FOR UPDATE` di dalam transaksi database ACID untuk mencegah *race conditions* saat dua request tiba bersamaan.
+3. **Financial Idempotency:** Seluruh pencatatan kas keluar/masuk, pembayaran angsuran, dan pembukuan saldo awal diverifikasi menggunakan `idempotency_key` dengan konstrain unik. Pengiriman berulang (*retry/double-click*) menghasilkan respons idempotent tanpa duplikasi transaksi.
+4. **Ledger-Based Accounting:** Saldo simpanan tidak disimpan sebagai nilai statis melainkan direkonstruksi secara dinamis dari mutasi kredit dan debit pada buku besar (*savings_transactions*).
 
 ---
 
-## 3. Akuntansi Simpanan Berbasis Buku Besar (Ledger-Based Accounting)
+## 4. Keamanan & Token Hashing
 
-- **Rekonstruksi Saldo:** Saldo rekening simpanan **tidak pernah disimpan secara statis sebagai variabel yang dapat dimanipulasi**. Nilai saldo riil selalu dihitung dengan rumus:
-  $$\text{Saldo} = \sum \text{Kredit} - \sum \text{Debit}$$
-- **Saldo Awal Migrasi:** Saldo migrasi lama dimasukkan ke tabel `savings_opening_balances` dan dicatat sebagai transaksi kredit awal pada `savings_transactions` bertipe `OPENING_BALANCE` dengan menyertakan nomor batch impor dan referensi audit.
-
----
-
-## 4. Mesin Persetujuan Pinjaman & Penegakan Maker-Checker
-
-### Diagram Alur Status Pengajuan
-```
-[SUBMITTED]
-    │
-    ▼ (Perutean otomatis ke manager_id karyawan)
-[ATASAN / MANAGER] ──(REJECT)──► [REJECTED]
-    │ (APPROVE)
-    ▼
-[KETUA KOPERASI]   ──(REJECT)──► [REJECTED]
-    │ (APPROVE)
-    ▼
-[WAITING_DISBURSEMENT]
-    │
-    ▼ (Pencairan oleh Bendahara)
-[DISBURSED] ──► Pinjaman Aktif Dibuat ([loans] & [loan_installments])
-```
-
-### Penegakan Maker-Checker
-- Sistem memeriksa `loan_applications.member_id.user_id == current_user.id`.
-- Jika atasan atau ketua mengajukan pinjaman untuk dirinya sendiri, sistem melempar `MakerCheckerViolation` dan memblokir aksi approval pada pengajuan tersebut.
-
----
-
-## 5. Token Verifikasi QR Berbasis Server
-
-- Token QR dihasilkan secara kriptografis menggunakan `secrets.token_urlsafe(24)`.
-- **Tidak** menyimpan status persetujuan, NIK, atau data pribadi di dalam teks/payload QR.
-- Token menunjuk ke URL `/verify/{token}`. Saat diakses, server melakukan verifikasi status aktif dan validitas dokumen pada basis data.
-- Pejabat berwenang dapat mencabut token kapan saja (`revoke_token`), sehingga status verifikasi seketika berubah menjadi `REVOKED`.
+1. **Zero Raw Token in DB:** Token reset password, token undangan akun, dan token QR dokumen hanya disimpan dalam bentuk hash SHA-256 (`token_hash`) di database. Lookup verifikasi selalu mencocokkan `WHERE token_hash = ?`.
+2. **Zero Raw Token in Production Responses:** Pada `APP_ENV=production`, raw token dikirimkan secara privat via email dan tidak pernah diekspos dalam respons URL atau payload JSON.
+3. **Session Hardening & Rotation:** Sesi dirotasi saat login sukses. Cookie menggunakan `HttpOnly`, `SameSite=Lax`, dan `Secure`. Seluruh sesi aktif otomatis diinaktivasi saat password diubah atau akun dinonaktifkan.
+4. **Brute-Force & Lockout:** Pembatasan maksimal 5 kali percobaan login gagal dengan penguncian sementara akun selama 15 menit. Pengecekan kunci dilakukan sebelum hashing password untuk memitigasi serangan DoS timing.
+5. **CSRF Defense-in-Depth:** Seluruh metode HTTP state-changing (`POST`, `PUT`, `PATCH`, `DELETE`) divalidasi ganda menggunakan Origin/Referer check dan sinkronisasi token CSRF kriptografis.
+6. **Maker-Checker & Approver Snapshot:** Approver pinjaman dibekukan (*snapshotted*) saat pengajuan dibuat, dan pemohon dilarang menyetujui pengajuannya sendiri.

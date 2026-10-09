@@ -4,17 +4,18 @@ Enforces maker-checker guardrails, automatic manager routing, exact Decimal math
 idempotent installment processing, and audit logging.
 """
 from decimal import Decimal, ROUND_HALF_UP
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 import secrets
 
-from app.database import get_db
+from app.database import get_db, execute_insert
 from app.security import (
     to_decimal,
     format_rupiah,
     log_audit,
     generate_reference_number,
     generate_secure_token,
+    hash_token,
 )
 from app.config import (
     ROLE_SUPER_ADMIN,
@@ -107,7 +108,8 @@ def apply_for_loan(
         if not assigned_manager_user_id:
             current_step = "KETUA"
 
-        cur = conn.execute(
+        app_id = execute_insert(
+            conn,
             """
             INSERT INTO loan_applications (
                 application_number, member_id, amount, tenor_months, interest_rate,
@@ -126,7 +128,6 @@ def apply_for_loan(
                 assigned_manager_user_id,
             ),
         )
-        app_id = cur.lastrowid
 
         # Insert initial approval steps
         if assigned_manager_user_id:
@@ -201,7 +202,7 @@ def process_approval(
             SELECT la.*, m.user_id as member_user_id, m.name as member_name, m.member_number
             FROM loan_applications la
             JOIN members m ON la.member_id = m.id
-            WHERE la.id = ?
+            WHERE la.id = ? FOR UPDATE
             """,
             (application_id,),
         ).fetchone()
@@ -348,7 +349,7 @@ def disburse_loan(
             SELECT la.*, m.member_number, m.name as member_name, m.bank_account
             FROM loan_applications la
             JOIN members m ON la.member_id = m.id
-            WHERE la.id = ?
+            WHERE la.id = ? FOR UPDATE
             """,
             (application_id,),
         ).fetchone()
@@ -356,6 +357,18 @@ def disburse_loan(
         if not app:
             raise LoanError("Pengajuan pinjaman tidak ditemukan.")
 
+        if app["status"] == "DISBURSED":
+            existing_l = conn.execute("SELECT * FROM loans WHERE application_id = ?", (application_id,)).fetchone()
+            if existing_l:
+                return {
+                    "loan_id": existing_l["id"],
+                    "loan_number": existing_l["loan_number"],
+                    "disbursed_amount": str(existing_l["principal_amount"]),
+                    "document_id": None,
+                    "qr_token": None,
+                    "status": "DISBURSED",
+                    "already_processed": True,
+                }
         if app["status"] != "WAITING_DISBURSEMENT":
             raise LoanError(f"Pinjaman tidak dapat dicairkan. Status saat ini: {app['status']} (harus WAITING_DISBURSEMENT).")
 
@@ -364,12 +377,13 @@ def disburse_loan(
         sched = calculate_loan_schedule(principal, tenor_months)
         loan_number = generate_reference_number("LOAN")
 
-        start_date = datetime.utcnow().strftime("%Y-%m-%d")
+        start_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         # Due date: end of tenor
-        due_date = (datetime.utcnow() + timedelta(days=30 * tenor_months)).strftime("%Y-%m-%d")
+        due_date = (datetime.now(timezone.utc) + timedelta(days=30 * tenor_months)).strftime("%Y-%m-%d")
 
         # 1. Create active loan
-        cur_l = conn.execute(
+        loan_id = execute_insert(
+            conn,
             """
             INSERT INTO loans (
                 loan_number, application_id, member_id, principal_amount, total_amount,
@@ -391,11 +405,10 @@ def disburse_loan(
                 current_user["id"],
             ),
         )
-        loan_id = cur_l.lastrowid
 
         # 2. Generate installment schedule
         for inst_num in range(1, tenor_months + 1):
-            inst_due = (datetime.utcnow() + timedelta(days=30 * inst_num)).strftime("%Y-%m-%d")
+            inst_due = (datetime.now(timezone.utc) + timedelta(days=30 * inst_num)).strftime("%Y-%m-%d")
             inst_idemp = f"IDEMP-{loan_number}-INST-{inst_num}"
             conn.execute(
                 """
@@ -436,7 +449,8 @@ def disburse_loan(
 
         # 4. Generate SK Pinjaman Document & QR Token
         doc_num = generate_reference_number("DOC-SKP")
-        cur_doc = conn.execute(
+        doc_id = execute_insert(
+            conn,
             """
             INSERT INTO documents (
                 document_number, title, document_type, owner_user_id, reference_type,
@@ -452,15 +466,16 @@ def disburse_loan(
                 current_user["id"],
             ),
         )
-        doc_id = cur_doc.lastrowid
 
         qr_token = generate_secure_token(24)
+        qr_digest = hash_token(qr_token)
+        qr_display = f"{qr_token[:4]}...{qr_token[-4:]}"
         conn.execute(
             """
-            INSERT INTO qr_verification_tokens (token, document_id, is_revoked, created_at)
-            VALUES (?, ?, 0, datetime('now'))
+            INSERT INTO qr_verification_tokens (token_hash, token_display, document_id, is_revoked, created_at)
+            VALUES (?, ?, ?, 0, datetime('now'))
             """,
-            (qr_token, doc_id),
+            (qr_digest, qr_display, doc_id),
         )
 
         # 5. Update loan application status to DISBURSED
@@ -526,7 +541,7 @@ def pay_loan_installment(
             FROM loan_installments li
             JOIN loans l ON li.loan_id = l.id
             JOIN members m ON l.member_id = m.id
-            WHERE li.id = ?
+            WHERE li.id = ? FOR UPDATE
             """,
             (installment_id,),
         ).fetchone()
@@ -548,7 +563,7 @@ def pay_loan_installment(
             raise LoanError(f"Nominal pembayaran kurang. Tagihan angsuran: {format_rupiah(required_amount)}.")
 
         # Update installment record
-        today = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         conn.execute(
             """
             UPDATE loan_installments
@@ -639,7 +654,7 @@ def get_loan_details(loan_id: int, current_user: Dict[str, Any]) -> Dict[str, An
         # Associated document & QR
         doc = conn.execute(
             """
-            SELECT d.id, d.document_number, d.title, qr.token, qr.is_revoked
+            SELECT d.id, d.document_number, d.title, qr.token_hash, qr.token_display, qr.is_revoked
             FROM documents d
             LEFT JOIN qr_verification_tokens qr ON d.id = qr.document_id
             WHERE d.reference_type = 'LOAN' AND d.reference_id = ?

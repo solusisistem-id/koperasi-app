@@ -3,7 +3,7 @@ Bulk Import Validation Logic for Koperasi Core.
 Validates headers, data types, normalization, intra-file duplicates, and database duplicates.
 """
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple, Optional
 from decimal import Decimal
 
@@ -135,7 +135,7 @@ def validate_member_row(
     elif parsed_date:
         norm_data["membership_date"] = parsed_date
     else:
-        norm_data["membership_date"] = datetime.utcnow().strftime("%Y-%m-%d")
+        norm_data["membership_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # 5. Membership status validation
     if status_val not in VALID_STATUSES:

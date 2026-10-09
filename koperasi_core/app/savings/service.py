@@ -5,12 +5,12 @@ opening balance batch traceability, and balance reconstruction.
 """
 from decimal import Decimal
 from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 import csv
 import io
 import openpyxl
 
-from app.database import get_db
+from app.database import get_db, execute_insert
 from app.security import to_decimal, format_rupiah, log_audit, sanitize_for_spreadsheet
 from app.config import (
     ROLE_SUPER_ADMIN,
@@ -142,11 +142,11 @@ def record_opening_balance(
             if not mem:
                 raise SavingsError(f"Anggota dengan ID {member_id} tidak ditemukan.")
             acc_num = f"SA-{account_type[:3]}-{mem['member_number']}"
-            cur_acc = conn.execute(
+            account_id = execute_insert(
+                conn,
                 "INSERT INTO savings_accounts (member_id, account_number, account_type, status) VALUES (?, ?, ?, 'ACTIVE')",
                 (member_id, acc_num, account_type),
             )
-            account_id = cur_acc.lastrowid
         else:
             account_id = acc["id"]
 
@@ -185,7 +185,8 @@ def record_opening_balance(
         )
 
         # Insert into savings_transactions (Ledger)
-        cur_tx = conn.execute(
+        tx_id = execute_insert(
+            conn,
             """
             INSERT INTO savings_transactions (
                 account_id, member_id, transaction_type, amount, balance_after,
@@ -203,7 +204,6 @@ def record_opening_balance(
                 current_user["id"],
             ),
         )
-        tx_id = cur_tx.lastrowid
 
         # Insert into financial_transactions
         from app.security import generate_reference_number
@@ -292,8 +292,9 @@ def record_deposit(
         prev_balance = to_decimal(prev_row["balance"])
         new_balance = prev_balance + amount
 
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        cur_tx = conn.execute(
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        tx_id = execute_insert(
+            conn,
             """
             INSERT INTO savings_transactions (
                 account_id, member_id, transaction_type, amount, balance_after,
@@ -311,7 +312,6 @@ def record_deposit(
                 current_user["id"],
             ),
         )
-        tx_id = cur_tx.lastrowid
 
         from app.security import generate_reference_number
         tx_num = generate_reference_number("FT-DEP")

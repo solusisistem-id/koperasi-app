@@ -3,11 +3,11 @@ Reporting and Analytics Service for Koperasi Core.
 Generates metrics for dashboards and operational reports across all domains.
 """
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from decimal import Decimal
 
-from app.database import get_db
+from app.database import get_db, execute_insert
 from app.security import format_rupiah, to_decimal
 from app.config import (
     ROLE_SUPER_ADMIN,
@@ -364,8 +364,8 @@ def init_default_units():
         for code, name, mgr, desc in units:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO business_units (code, name, manager_name, description, is_active)
-                VALUES (?, ?, ?, ?, 1)
+                INSERT INTO business_units (code, name, manager_name, description, is_active)
+                VALUES (?, ?, ?, ?, 1) ON CONFLICT (code) DO NOTHING
                 """,
                 (code, name, mgr, desc),
             )
@@ -453,7 +453,8 @@ def submit_unit_report(
                 ),
             )
         else:
-            cur = conn.execute(
+            report_id = execute_insert(
+                conn,
                 """
                 INSERT INTO unit_financial_reports (
                     unit_id, period_type, period_year, period_month,
@@ -469,7 +470,6 @@ def submit_unit_report(
                     str(d_n_profit), str(d_dep), deposit_date, notes or "", current_user["id"],
                 ),
             )
-            report_id = cur.lastrowid
 
         unit = conn.execute("SELECT name FROM business_units WHERE id = ?", (unit_id,)).fetchone()
         log_audit(
@@ -512,10 +512,11 @@ def verify_unit_report(report_id: int, current_user: Dict[str, Any]) -> bool:
 
             conn.execute(
                 """
-                INSERT OR IGNORE INTO financial_transactions (
+                INSERT INTO financial_transactions (
                     transaction_number, transaction_type, category, amount, idempotency_key,
                     reference_type, reference_id, description, created_by, created_at
                 ) VALUES (?, 'INFLOW', 'UNIT_DEPOSIT', ?, ?, 'UNIT_REPORT', ?, ?, ?, datetime('now'))
+                ON CONFLICT (transaction_number) DO NOTHING
                 """,
                 (
                     tx_num,
@@ -863,8 +864,8 @@ def init_default_settings():
         for key, val, cat, desc in DEFAULT_SETTINGS:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO system_settings (setting_key, setting_value, category, description)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO system_settings (setting_key, setting_value, category, description)
+                VALUES (?, ?, ?, ?) ON CONFLICT (setting_key) DO NOTHING
                 """,
                 (key, val, cat, desc),
             )
@@ -909,6 +910,76 @@ def backup_database() -> Tuple[bytes, str]:
     with open(db_file, "rb") as f:
         content = f.read()
 
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"backup_koperasi_{timestamp}.db"
     return content, filename
+
+
+# ==============================================================================
+# Email Notification Service
+# ==============================================================================
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+from app.config import (
+    SMTP_HOST,
+    SMTP_PORT,
+    SMTP_USER,
+    SMTP_PASSWORD,
+    SMTP_FROM_EMAIL,
+    APP_NAME,
+)
+
+def send_email(to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
+    if not to_email:
+        return False
+    if SMTP_HOST and SMTP_USER and SMTP_PASSWORD:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = f"[{APP_NAME}] {subject}"
+            msg["From"] = SMTP_FROM_EMAIL
+            msg["To"] = to_email
+            if text_body:
+                msg.attach(MIMEText(text_body, "plain", "utf-8"))
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10.0) as server:
+                server.starttls()
+                server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
+            return True
+        except Exception as e:
+            if APP_ENV == "production":
+                raise RuntimeError(f"SMTP Delivery Failed: {str(e)}")
+            return False
+    return True
+
+def send_invitation_email(to_email: str, full_name: str, activation_url: str) -> bool:
+    subject = "Undangan Aktivasi Akun Koperasi"
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2563eb;">Selamat Datang di {APP_NAME}</h2>
+        <p>Halo <strong>{full_name}</strong>,</p>
+        <p>Anda telah didaftarkan dalam sistem Koperasi Core. Silakan klik tautan di bawah ini untuk mengaktifkan akun dan menentukan password pribadi Anda:</p>
+        <p style="margin: 24px 0;">
+            <a href="{activation_url}" style="background-color: #2563eb; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Aktivasi Akun Saya</a>
+        </p>
+        <p style="font-size: 12px; color: #64748b;">Tautan ini berlaku selama 24 jam. Demi keamanan, jangan berikan tautan ini kepada siapapun.</p>
+    </div>
+    """
+    return send_email(to_email, subject, html)
+
+def send_password_reset_email(to_email: str, reset_url: str) -> bool:
+    subject = "Permintaan Reset Password Akun Koperasi"
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #2563eb;">Reset Password Akun</h2>
+        <p>Kami menerima permintaan untuk mereset password akun Anda di {APP_NAME}.</p>
+        <p>Silakan klik tombol di bawah ini untuk membuat password baru:</p>
+        <p style="margin: 24px 0;">
+            <a href="{reset_url}" style="background-color: #dc2626; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Buat Password Baru</a>
+        </p>
+        <p style="font-size: 12px; color: #64748b;">Tautan ini berlaku selama 1 jam dan hanya dapat digunakan 1 kali. Jika Anda tidak meminta reset password, abaikan email ini.</p>
+    </div>
+    """
+    return send_email(to_email, subject, html)

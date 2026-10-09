@@ -10,7 +10,7 @@ from datetime import datetime
 # Adjust path to import app modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.database import get_db, init_db, DB_PATH
+from app.database import get_db, init_db, DB_PATH, execute_insert
 from app.security import hash_password, log_audit, to_decimal
 from app.config import (
     ROLE_SUPER_ADMIN,
@@ -37,7 +37,7 @@ def seed_all():
         ]
         for code, name, desc in roles_data:
             conn.execute(
-                "INSERT OR IGNORE INTO roles (code, name, description) VALUES (?, ?, ?)",
+                "INSERT INTO roles (code, name, description) VALUES (?, ?, ?) ON CONFLICT (code) DO NOTHING",
                 (code, name, desc),
             )
 
@@ -50,7 +50,7 @@ def seed_all():
         ]
         dept_ids = {}
         for code, name in depts:
-            conn.execute("INSERT OR IGNORE INTO departments (code, name) VALUES (?, ?)", (code, name))
+            conn.execute("INSERT INTO departments (code, name) VALUES (?, ?) ON CONFLICT (code) DO NOTHING", (code, name))
             row = conn.execute("SELECT id FROM departments WHERE code = ?", (code,)).fetchone()
             dept_ids[code] = row["id"]
 
@@ -66,7 +66,7 @@ def seed_all():
         for d_code, p_code, title in positions:
             d_id = dept_ids[d_code]
             conn.execute(
-                "INSERT OR IGNORE INTO positions (department_id, code, title) VALUES (?, ?, ?)",
+                "INSERT INTO positions (department_id, code, title) VALUES (?, ?, ?) ON CONFLICT (code) DO NOTHING",
                 (d_id, p_code, title),
             )
             row = conn.execute("SELECT id FROM positions WHERE code = ?", (p_code,)).fetchone()
@@ -77,14 +77,14 @@ def seed_all():
             user = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
             if not user:
                 pwd_hash = hash_password(password)
-                cur = conn.execute(
+                user_id = execute_insert(
+                    conn,
                     """
                     INSERT INTO users (email, password_hash, full_name, status, created_at, updated_at)
                     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
                     """,
                     (email, pwd_hash, full_name, status),
                 )
-                user_id = cur.lastrowid
                 print(f"Created user: {email} (ID: {user_id})")
                 log_audit(
                     conn,
@@ -103,7 +103,7 @@ def seed_all():
                 role = conn.execute("SELECT id FROM roles WHERE code = ?", (r_code,)).fetchone()
                 if role:
                     conn.execute(
-                        "INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)",
+                        "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?) ON CONFLICT (user_id, role_id) DO NOTHING",
                         (user_id, role["id"]),
                     )
             return user_id
@@ -121,14 +121,14 @@ def seed_all():
         )
         budi_emp = conn.execute("SELECT id FROM employees WHERE employee_id = 'EMP-001'").fetchone()
         if not budi_emp:
-            cur = conn.execute(
+            budi_emp_id = execute_insert(
+                conn,
                 """
                 INSERT INTO employees (employee_id, name, nik, email, phone, department_id, position_id, manager_id, status)
                 VALUES ('EMP-001', 'Budi Santoso', '3171010101800001', 'manager.budi@koperasi.local', '081234567890', ?, ?, NULL, 'ACTIVE')
                 """,
                 (dept_ids["IT"], pos_ids["IT_HEAD"]),
             )
-            budi_emp_id = cur.lastrowid
         else:
             budi_emp_id = budi_emp["id"]
 
@@ -138,21 +138,22 @@ def seed_all():
         )
         andi_emp = conn.execute("SELECT id FROM employees WHERE employee_id = 'EMP-002'").fetchone()
         if not andi_emp:
-            cur = conn.execute(
+            andi_emp_id = execute_insert(
+                conn,
                 """
                 INSERT INTO employees (employee_id, name, nik, email, phone, department_id, position_id, manager_id, status)
                 VALUES ('EMP-002', 'Andi Pratama', '3171010202900002', 'member.andi@koperasi.local', '081234567891', ?, ?, ?, 'ACTIVE')
                 """,
                 (dept_ids["IT"], pos_ids["ENG"], budi_emp_id),
             )
-            andi_emp_id = cur.lastrowid
         else:
             andi_emp_id = andi_emp["id"]
 
         # Andi Member Record
         andi_member = conn.execute("SELECT id FROM members WHERE member_number = 'MEM-001'").fetchone()
         if not andi_member:
-            cur = conn.execute(
+            andi_member_id = execute_insert(
+                conn,
                 """
                 INSERT INTO members (
                     member_number, employee_id, user_id, name, nik, email, phone,
@@ -164,17 +165,16 @@ def seed_all():
                 """,
                 (andi_emp_id, andi_user_id),
             )
-            andi_member_id = cur.lastrowid
             print(f"Created initial member Andi Pratama (MEM-001, ID: {andi_member_id})")
 
             # Create savings accounts for Andi: POKOK, WAJIB, SUKARELA
             for acc_type in ["POKOK", "WAJIB", "SUKARELA"]:
                 acc_num = f"SA-{acc_type[:3]}-MEM-001"
-                cur_acc = conn.execute(
-                    "INSERT INTO savings_accounts (member_id, account_number, account_type, status) VALUES (?, ?, ?, 'ACTIVE')",
+                acc_id = execute_insert(
+                    conn,
+                    "INSERT INTO savings_accounts (member_id, account_number, account_type, status) VALUES (?, ?, ?, 'ACTIVE') ON CONFLICT (account_number) DO NOTHING",
                     (andi_member_id, acc_num, acc_type),
                 )
-                acc_id = cur_acc.lastrowid
 
                 # Add initial opening balance transaction
                 initial_amount = "500000.00" if acc_type == "POKOK" else ("100000.00" if acc_type == "WAJIB" else "250000.00")
